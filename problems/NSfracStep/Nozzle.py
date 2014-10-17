@@ -1,4 +1,4 @@
-from problems import *
+from ..NSfracStep import *
 from math import pi
 from fenicstools import StatisticsProbes
 from numpy import array, linspace
@@ -12,12 +12,11 @@ recursive_update(NS_parameters,
                       dt=0.0001,
                       folder="nozzle_results",
                       case=500,
-                      steady=False,
                       save_tstep=1000,
                       checkpoint=1000,
-                      check_steady=100,
+                      check_steady=1,
                       velocity_degree=1,
-                      mesh_path="mesh/8M_nozzle.xml",
+                      mesh_path="mesh/nozzle_112k.xml.gz",  #"mesh/8M_nozzle.xml",
                       print_intermediate_info=1000,
                       use_lumping_of_mass_matrix=True,
                       low_memory_version=True,
@@ -72,13 +71,12 @@ def initialize(q_, **NS_namespace):
     q_['u2'].vector()[:] = 1e-12
 
 
-def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, **NS_namesepace):
+def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepace):
     # To compute uv and flux
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
                              constrained_domain=constrained_domain)
     Pv = FunctionSpace(mesh, 'CG', pressure_degree,
                        constrained_domain=constrained_domain)
-    normal = FacetNormal(mesh)
 
     # No need to make the entire slice for validation
     # only need to avaluate in a line at each z point.
@@ -102,27 +100,13 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, **NS_namesepace):
     slices_ss = []
 
     for i in range(len(z)):
-        eval_points = array([[x, 0 z[i]] for x in linspace(-radius[i],
+        eval_points = array([[x, 0, z[i]] for x in linspace(-radius[i],
                                                            radius[i], 1000)])
         slices_u.append(StatisticsProbes(eval_points.flatten(), Vv))
         slices_ss.append(StatisticsProbes(eval_points.flatten(), Vv))
         #stats.append(StructuredGrid(V, N, [-0.006, -0.006, z_],
         #                            vectors, dL, statistics=True))
 
-
-    # Normals and domains to compute flux at at
-    # each point (z), inlet and outlet
-    normal = FacetNormal(mesh)
-    Inlet = AutoSubDomain(inlet)
-    Outlet = AutoSubDomain(outlet)
-    domains = FacetFunction('size_t', mesh, 0)
-
-    # mark domanis
-    Inlet.mark(domains, 1)
-    Outlet.mark(domains, 2)
-    Slice.mark(domains, 3)
-
-    plot(Inlet, interactive=True)
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(-0.18269, 0.32, 10000)
@@ -153,31 +137,60 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, **NS_namesepace):
     senterline_ss = StatisticsProbes(x_senter.flatten(), Pv)
     wall_p = StatisticsProbes(x_wall.flatten(), Pv)
     wall_wss = StatisticsProbes(x_wall.flatten(), Pv)
+    
+    # LagrangeInterpolator for later use
+    li = LagrangeInterpolator()
+    
+    # Box as a basis for a slice
+    mesh = BoxMesh(-r1, -r1, -r1, r1, r1, r1, 100, 100, 100)
+    bmesh = BoundaryMesh(mesh, "exterior")
 
-    #uv = Function(Vv)
-    #pv = Function(Pv)
+    # Create SubMesh for side at z=0
+    # This will be a UnitSquareMesh with topology dimension 2 in 3 space
+    # dimensions
+    cc = CellFunction('size_t', bmesh, 0)
+    xyplane = AutoSubDomain(lambda x: x[2] < -r1 + DOLFIN_EPS)
+    xyplane.mark(cc, 1)
+    submesh = SubMesh(bmesh, cc, 1)
 
-    #def epsilon(u):
-    #    return 
+    # Coordinates for the slice
+    coordinates = submesh.coordinates()
 
-    #sigma = 2*nu * epsilon(uv)
+    # Create a FunctionSpace on the submesh
+    Vs = VectorFunctionSpace(submesh, "CG", 1)
+    us = Function(Vs)
 
-    return dict(uv=Function(Vv), pv=Function(Pv), ssv=Functon(Pv), 
+    # Normal vector
+    n = project(Expression(("0", "0", "1")), Vs)
+
+    def flux(u, z):
+        # Move slice to z
+        coordinates[:, 2] = z
+
+        # LagrangeInterpolator required in parallel
+        li.interpolate(us, u)
+        
+        # Compute flux
+        return assemble(dot(us, n)*dx)
+
+    return dict(uv=Function(Vv), pv=Function(Pv),# ssv=Functon(Pv), 
                 radius=radius, u_diff=Function(Vv), u_prev=Function(Vv), 
                 Vv=Vv, wall_p=wall_p, wall_wss=wall_wss, senterline_u=senterline_u,
                 senterline_p=senterline_p, senterline_ss=senterline_ss, 
-                domains=domains, Pv=Pv, z_senterline=z_senterline, 
-                normal=normal, slices_u=slice_u, slices_ss=slice_ss, z=z)
+                Pv=Pv, z_senterline=z_senterline,
+                slices_u=slices_u, 
+                slices_ss=slices_ss, z=z, flux=flux)
 
 
-def temporal_hook(tstep, info_red, steady, dt, radius, u_diff, pv,
-                  Pv, u_prev, u_, check_steady, domains, normal,
+def temporal_hook(tstep, info_red, dt, radius, u_diff, pv,
+                  Pv, u_prev, u_, check_steady, flux,
                   Vv, uv, newfolder, mesh, p_, case, wall_p, wall_wss,
                   z_senterline, folder, senterline_u, senterline_p,
                   senterline_ss, slices_u, slices_ss, z, **NS_namespace):
 
     # Check steady state
-    if tstep % check_steady == 0:
+    if tstep % (check_steady*100) == 0 \
+            and senterline_u.number_of_evaluations() == 0:
         # uv.assign(project(u_, Vv))
         # file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%d.pvd" \
         #        % (dt, mesh.hmin(), tstep))
@@ -186,45 +199,46 @@ def temporal_hook(tstep, info_red, steady, dt, radius, u_diff, pv,
         uv.assign(project(u_, Vv))
         u_diff.assign(uv - u_prev)
         diff = norm(u_diff)/norm(uv)
-        print "Diff: %1.4e   time: %f" % (diff, tstep*dt)
+        info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        inlet_flux = assemble(dot(u_, normal)*ds(1),
-                              exterior_facet_domains=domains)
-        outlet_flux = assemble(dot(u_, normal)*ds(2),
-                               exterior_facet_domains=domains)
-        rel_err = (abs(inlet_flux) - abs(outlet_flux)) / abs(inlet_flux)
-        # TODO: change with theoretical value
+        if diff < 0.5: #2.5e-4:
+            pv.assign(project(p_, Pv))
+            # Evaluate senterline
+            senterline_u(uv)
+            senterline_p(pv)
+            #senterline_ss(ssv)
+            # Evaluate at the wall
+            wall_p(pv)
+            #wall_wss(ssv)
 
-        if MPI.process_number() == 0:
-            info_red("Flux in: %e\nFlux out: %e\nRelativ error: %e\ntstep: %d"
-                     % (inlet_flux, outlet_flux, rel_err, tstep))
-
-        if diff < 2.5e-4:
-            steady = True   # Save stats and kill the program
+            # Evaluate for each slice
+            for i in range(len(slices_u)):
+                slices_u[i](uv)
+                #slices_ss[i](ssv)
         else:
             u_prev.assign(uv)
 
-    if steady:
+    if senterline_u.number_of_evaluations() > 0:
         # Variables to store
         #ssv.assign(project(tau(u), Pv))
         uv.assign(project(u_, Vv))
         pv.assign(project(p_, Pv))
-
+        
         # Evaluate senterline
         senterline_u(uv)
         senterline_p(pv)
         #senterline_ss(ssv)
-
+        
         # Evaluate at the wall
         wall_p(pv)
         #wall_wss(ssv)
-
+        
         # Evaluate for each slice
         for i in range(len(slices_u)):
             slices_u[i](uv)
             #slices_ss[i](ssv)
 
-    if senterline_u.number_of_evaluations == 100:
+    if senterline_u.number_of_evaluations() == 2:
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e.pvd"
                     % (dt, mesh.hmin()))
         file << uv
@@ -233,34 +247,39 @@ def temporal_hook(tstep, info_red, steady, dt, radius, u_diff, pv,
         file << pv
 
         # save the data from the centerline
-        info = open(newfolder + "/Stats/nozzle_stats.txt", 'w')
-        info = write_overhead(info, dt, tstep*dt, mesh.hmin(),
-                              mesh.hmax())
+        info = open(newfolder + "/nozzle_stats.txt", 'w')
+        info = write_overhead(info, dt, tstep*dt, mesh.hmin(), case, mesh.hmax())
         
         senterline_u(uv)
-        info = write_data(info, senterline_u, "Velocity senterline")
+        info = write_data(info, senterline_u, z, "Velocity senterline")
 
-        senterline_ss(ssv)
-        info = write_data(info, senterline_ss, "Share stress senterline")
+        #senterline_ss(ssv)
+        #info = write_data(info, senterline_ss, "Share stress senterline")
 
         senterline_p(pv)
-        info = write_data(info, senterline_p, "Pressure senterline")
+        info = write_data(info, senterline_p, z, "Pressure senterline")
 
         wall_p(pv)
-        info = write_data(info, wall_p, "Wall pressure")
+        info = write_data(info, wall_p, z, "Wall pressure")
 
-        wall_wss(ssv)
-        info = write_data(info, wall_wss, "Wall share stress")
-
-        for slice in range(len(slices_u)):
-            slice[i](uv)
-            info = write_data(info, slice, "Axial velocity at z=%d" % z[i])
+        #wall_wss(ssv)
+        #info = write_data(info, wall_wss, "Wall share stress")
 
         for slice in range(len(slices_u)):
             slice[i](uv)
-            info = write_data(info, slice, "Axial share stress at z=%d" % z[i])
+            info = write_data(info, slice, z, "Axial velocity at z=%d" % z[i])
 
+        #for slice in range(len(slices_ss)):
+        #    slice[i](uv)
+        #    info = write_data(info, slice, "Axial share stress at z=%d" % z[i])
 
+        info.write("Flux at each slice")
+        for z_ in [-0.18269] + z + [0.32]:
+            info.write("%e %e" % (z_, flux(uv, z=z_)))
+
+        print("="*50)
+        print("END")
+        print("="*50)
         info.close
         kill = open(folder + '/killoasis', 'w')
         kill.close
@@ -276,11 +295,12 @@ def write_overhead(File, dt, T, hmin, Re, hmax):
     File.write("Re=%d\n" % Re)
     return File
 
-def write_data(File, probes, headline, direction=2):
+def write_data(File, probes, points, headline, direction=2):
     array = probes.array()
-    points = probes.coordinates()
     File.write(headline)
     File.write("%d\n" % len(array))
+    print(array)
+    print(array[5])
     for i in range(len(array)):
-        File.write("%e %e\n" % points[direction][i], array[i]
+        File.write("%e %e\n" % (points[i], array[i]))
     return File
