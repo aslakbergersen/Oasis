@@ -50,7 +50,7 @@ def create_bcs(V, sys_comp, **NS_namespce):
     Q = 5.21E-6   # Re 6500: 6.77E-5 from FDA
     r_0 = 0.006
     u_0 = Q / (4*r_0*r_0*(1-2/pi))  # Analytical different r_0
-    inn = Expression('u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/r_0)', u_0=u_0, r_0=r_0)
+    inn = Expression('u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/r_0/r_0)', u_0=u_0, r_0=r_0)
 
     bcs = dict((ui, []) for ui in sys_comp)
     bc0 = DirichletBC(V, Constant(0), walls)
@@ -194,7 +194,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         diff = norm(u_diff)/norm(uv)
         info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        if tstep = 10000:#diff < 2.5e-4:
+        if tstep == 10000:  # diff < 2.5e-4:
             pv.assign(project(p_, Pv))
             ssv = stress(uv)
 
