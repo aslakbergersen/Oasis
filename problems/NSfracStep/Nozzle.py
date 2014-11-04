@@ -9,14 +9,14 @@ recursive_update(NS_parameters,
                  dict(mu=0.0035,
                       nu=0.0035 / 1056.,
                       T=1000,
-                      dt=0.0001,
+                      dt=0.001,
                       folder="nozzle_results",
                       case=500,
                       save_tstep=1000,
                       checkpoint=1000,
-                      check_steady=1,
+                      check_steady=100,
                       velocity_degree=1,
-                      mesh_path="mesh/nozzle_112k.xml.gz",  #"mesh/8M_nozzle.xml",
+                      mesh_path="mesh/mesh_medium.xml",  #"mesh/8M_nozzle.xml",
                       print_intermediate_info=1000,
                       use_lumping_of_mass_matrix=True,
                       low_memory_version=True,
@@ -49,9 +49,8 @@ def outlet(x, on_boundary):
 def create_bcs(V, sys_comp, **NS_namespce):
     Q = 5.21E-6   # Re 6500: 6.77E-5 from FDA
     r_0 = 0.006
-    u_maks = Q / (4*r_0*r_0*(1-2/pi))  # Analytical different r_0
-    inn = Expression('u_maks * cos(sqrt(pow(x[0],2) + \
-            pow(x[1],2))/r_0/2.*pi)', u_maks=u_maks, r_0=r_0)
+    u_0 = Q / (4*r_0*r_0*(1-2/pi))  # Analytical different r_0
+    inn = Expression('u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/r_0)', u_0=u_0, r_0=r_0)
 
     bcs = dict((ui, []) for ui in sys_comp)
     bc0 = DirichletBC(V, Constant(0), walls)
@@ -72,22 +71,11 @@ def initialize(q_, **NS_namespace):
 
 
 def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepace):
-    # To compute uv and flux
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
                              constrained_domain=constrained_domain)
     Pv = FunctionSpace(mesh, 'CG', pressure_degree,
                        constrained_domain=constrained_domain)
 
-    # No need to make the entire slice for validation
-    # only need to avaluate in a line at each z point.
-    # And since the geometry is relativly small
-    # (for now) it's ok to store the entire
-    # figure for vizualisation.
-    # Create 12 slices
-    # origin = [-0.006, -0.006, 0.0]
-    # vectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    # dL = [0.012, 0.012, 0]
-    # N = [200, 200, 1]
     r3 = 0.008/0.022685 * 0.006 # On nozzle
     r1 = 0.006
     r2 = 0.002
@@ -98,15 +86,13 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
 
     slices_u = []
     slices_ss = []
+    slices_points = []
 
     for i in range(len(z)):
-        eval_points = array([[x, 0, z[i]] for x in linspace(-radius[i],
-                                                           radius[i], 1000)])
+        slices_points.append(linspace(-radius[i], radius[i], 1000))
+        eval_points = array([[x, 0, z[i]] for x in slices_points[-1]])
         slices_u.append(StatisticsProbes(eval_points.flatten(), Vv))
         slices_ss.append(StatisticsProbes(eval_points.flatten(), Vv))
-        #stats.append(StructuredGrid(V, N, [-0.006, -0.006, z_],
-        #                            vectors, dL, statistics=True))
-
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(-0.18269, 0.32, 10000)
@@ -173,72 +159,82 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
         # Compute flux
         return assemble(dot(us, n)*dx)
 
+    def stress(u):
+        def epsilon(u):
+            return 0.5*(grad(u) + grad(u).T)
+        return project(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
+
     return dict(uv=Function(Vv), pv=Function(Pv),# ssv=Functon(Pv), 
                 radius=radius, u_diff=Function(Vv), u_prev=Function(Vv), 
                 Vv=Vv, wall_p=wall_p, wall_wss=wall_wss, senterline_u=senterline_u,
                 senterline_p=senterline_p, senterline_ss=senterline_ss, 
-                Pv=Pv, z_senterline=z_senterline,
-                slices_u=slices_u, 
+                Pv=Pv, z_senterline=z_senterline, stress=stress,
+                slices_u=slices_u, slices_points=slices_points,
                 slices_ss=slices_ss, z=z, flux=flux)
 
 
-def temporal_hook(tstep, info_red, dt, radius, u_diff, pv,
-                  Pv, u_prev, u_, check_steady, flux,
+def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
+                  Pv, u_prev, u_, check_steady, flux, slices_points,
                   Vv, uv, newfolder, mesh, p_, case, wall_p, wall_wss,
                   z_senterline, folder, senterline_u, senterline_p,
                   senterline_ss, slices_u, slices_ss, z, **NS_namespace):
 
     # Check steady state
-    if tstep % (check_steady*100) == 0 \
+    if tstep % check_steady == 0 \
             and senterline_u.number_of_evaluations() == 0:
-        # uv.assign(project(u_, Vv))
-        # file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%d.pvd" \
-        #        % (dt, mesh.hmin(), tstep))
-        # file << uv
+        uv.assign(project(u_, Vv))
+        file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
+               % (dt, mesh.hmin(), tstep))
+        file << uv
+
+        print(flux(uv, -0.1))
 
         uv.assign(project(u_, Vv))
         u_diff.assign(uv - u_prev)
         diff = norm(u_diff)/norm(uv)
         info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        if diff < 0.5: #2.5e-4:
+        if tstep = 10000:#diff < 2.5e-4:
             pv.assign(project(p_, Pv))
+            ssv = stress(uv)
+
             # Evaluate senterline
             senterline_u(uv)
             senterline_p(pv)
-            #senterline_ss(ssv)
+            senterline_ss(ssv)
+
             # Evaluate at the wall
             wall_p(pv)
-            #wall_wss(ssv)
+            wall_wss(ssv)
 
             # Evaluate for each slice
             for i in range(len(slices_u)):
                 slices_u[i](uv)
-                #slices_ss[i](ssv)
+                slices_ss[i](ssv)
         else:
             u_prev.assign(uv)
 
     if senterline_u.number_of_evaluations() > 0:
         # Variables to store
-        #ssv.assign(project(tau(u), Pv))
         uv.assign(project(u_, Vv))
         pv.assign(project(p_, Pv))
-        
+        ssv = stress(uv)
+
         # Evaluate senterline
         senterline_u(uv)
         senterline_p(pv)
-        #senterline_ss(ssv)
+        senterline_ss(ssv)
         
         # Evaluate at the wall
         wall_p(pv)
-        #wall_wss(ssv)
+        wall_wss(ssv)
         
         # Evaluate for each slice
         for i in range(len(slices_u)):
             slices_u[i](uv)
-            #slices_ss[i](ssv)
+            slices_ss[i](ssv)
 
-    if senterline_u.number_of_evaluations() == 2:
+    if senterline_u.number_of_evaluations() == 1000:
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e.pvd"
                     % (dt, mesh.hmin()))
         file << uv
@@ -246,44 +242,45 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv,
                     % (dt, mesh.hmin()))
         file << pv
 
-        # save the data from the centerline
+        # Save data from the centerline
         info = open(newfolder + "/nozzle_stats.txt", 'w')
         info = write_overhead(info, dt, tstep*dt, mesh.hmin(), case, mesh.hmax())
         
         senterline_u(uv)
-        info = write_data(info, senterline_u, z, "Velocity senterline")
+        info = write_data(info, senterline_u, z_senterline, "Velocity senterline")
 
-        #senterline_ss(ssv)
-        #info = write_data(info, senterline_ss, "Share stress senterline")
+        senterline_ss(ssv)
+        info = write_data(info, senterline_ss, z_senterline, "Share stress senterline")
 
         senterline_p(pv)
-        info = write_data(info, senterline_p, z, "Pressure senterline")
-
+        info = write_data(info, senterline_p, z_senterline, "Pressure senterline")
+        
+        # Save date from the wall
         wall_p(pv)
-        info = write_data(info, wall_p, z, "Wall pressure")
+        info = write_data(info, wall_p, z_senterline, "Wall pressure")
 
-        #wall_wss(ssv)
-        #info = write_data(info, wall_wss, "Wall share stress")
+        wall_wss(ssv)
+        info = write_data(info, wall_wss, z_senterline, "Wall share stress")
 
-        for slice in range(len(slices_u)):
+        # Save data from slices
+        for i in range(len(slices_u)):
+            slices_u[i](uv)
+            info = write_data(info, slices_u[i], slices_points[i],
+                              "Axial velocity at z=%f" % z[i])
+
+        for i in range(len(slices_ss)):
             slice[i](uv)
-            info = write_data(info, slice, z, "Axial velocity at z=%d" % z[i])
+            info = write_data(info, slice, "Axial share stress at z=%d" % z[i])
 
-        #for slice in range(len(slices_ss)):
-        #    slice[i](uv)
-        #    info = write_data(info, slice, "Axial share stress at z=%d" % z[i])
-
-        info.write("Flux at each slice")
+        # Saving the flux
+        info.write("Flux at each slice\n")
+        info.write("%d\n" % (len(z) +2))
         for z_ in [-0.18269] + z + [0.32]:
-            info.write("%e %e" % (z_, flux(uv, z=z_)))
+            info.write("%e %e\n" % (z_, flux(uv, z=z_)))
 
-        print("="*50)
-        print("END")
-        print("="*50)
         info.close
         kill = open(folder + '/killoasis', 'w')
         kill.close
-        # TODO: create a file that is called killoasis?
 
 
 def write_overhead(File, dt, T, hmin, Re, hmax):
@@ -295,12 +292,15 @@ def write_overhead(File, dt, T, hmin, Re, hmax):
     File.write("Re=%d\n" % Re)
     return File
 
+
 def write_data(File, probes, points, headline, direction=2):
-    array = probes.array()
-    File.write(headline)
+    array = probes.array() / probes.number_of_evaluations()
+    File.write(headline+"\n")
     File.write("%d\n" % len(array))
-    print(array)
-    print(array[5])
-    for i in range(len(array)):
-        File.write("%e %e\n" % (points[i], array[i]))
+    if len(array[1]) == 9:
+        for i in range(len(array)):
+            File.write("%e %e\n" % (points[i], array[i][3]))  
+    else:
+        for i in range(len(array)):
+            File.write("%e %e\n" % (points[i], array[i][0]))
     return File
