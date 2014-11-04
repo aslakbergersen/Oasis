@@ -15,17 +15,15 @@ NS_parameters.update(
   
   # Some discretization options
   AB_projection_pressure = False,  # Use Adams Bashforth projection as first estimate for pressure on new timestep
-  solver = "IPCS_ABCN",  # "IPCS_ABCN", "IPCS_ABE", "IPCS", "Chorin"
+  solver = "IPCS_ABCN",  # "IPCS_ABCN", "IPCS_ABE", "IPCS", "Chorin", "BDFPC", "BDFPC_Fast"
   
   # Parameters used to tweek solver  
   max_iter = 1,          # Number of inner pressure velocity iterations on timestep
   max_error = 1e-6,      # Tolerance for inner iterations (pressure velocity iterations)
   iters_on_first_timestep = 2, # Number of iterations on first timestep
   use_krylov_solvers = False,  # Otherwise use LU-solver
-  low_memory_version = False,  # Use assembler and not preassembled matrices
   print_intermediate_info = 10,
   print_velocity_pressure_convergence = False,
-  velocity_update_type = "default",
   
   # Parameters used to tweek output  
   plot_interval = 10,    
@@ -48,12 +46,12 @@ NS_parameters.update(
   velocity_update_solver = dict(
     method = 'default', #"lumping", "gradient_matrix" 
     solver_type = 'cg',
-    preconditioner_type = 'additive_schwarz',
+    preconditioner_type = 'jacobi',
     low_memory_version = False),
   
   velocity_krylov_solver = dict(
     solver_type = 'bicgstab',
-    preconditioner_type = 'additive_schwarz'),
+    preconditioner_type = 'jacobi'),
   
   pressure_krylov_solver = dict(
     solver_type = 'gmres',
@@ -61,7 +59,7 @@ NS_parameters.update(
   
   scalar_krylov_solver = dict(
     solver_type = 'bicgstab',
-    preconditioner_type = 'additive_schwarz')
+    preconditioner_type = 'jacobi')
   
 )
   
