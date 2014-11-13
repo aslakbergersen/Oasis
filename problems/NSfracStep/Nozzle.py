@@ -14,7 +14,7 @@ recursive_update(NS_parameters,
                       case=500,
                       save_tstep=1000,
                       checkpoint=1000,
-                      check_steady=100,
+                      check_steady=1,
                       velocity_degree=1,
                       mesh_path="mesh/mesh_medium.xml",  #"mesh/8M_nozzle.xml",
                       print_intermediate_info=1000,
@@ -49,7 +49,7 @@ def outlet(x, on_boundary):
 def create_bcs(V, sys_comp, **NS_namespce):
     Q = 5.21E-6   # Re 6500: 6.77E-5 from FDA
     r_0 = 0.006
-    u_0 = Q / (4*r_0*r_0*(1-2/pi))  # Analytical different r_0
+    u_0 = 2*Q / (r_0*r_0*pi)  # Analytical different r_0
     inn = Expression('u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/r_0/r_0)', u_0=u_0, r_0=r_0)
 
     bcs = dict((ui, []) for ui in sys_comp)
@@ -92,7 +92,7 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
         slices_points.append(linspace(-radius[i], radius[i], 1000))
         eval_points = array([[x, 0, z[i]] for x in slices_points[-1]])
         slices_u.append(StatisticsProbes(eval_points.flatten(), Vv))
-        slices_ss.append(StatisticsProbes(eval_points.flatten(), Vv))
+        slices_ss.append(StatisticsProbes(eval_points.flatten(), Pv))
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(-0.18269, 0.32, 10000)
@@ -186,7 +186,6 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
                % (dt, mesh.hmin(), tstep))
         file << uv
-
         print(flux(uv, -0.1))
 
         uv.assign(project(u_, Vv))
@@ -194,23 +193,24 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         diff = norm(u_diff)/norm(uv)
         info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        if tstep == 10000:  # diff < 2.5e-4:
+        if diff < 1.5e-2:
             pv.assign(project(p_, Pv))
             ssv = stress(uv)
-
+            
             # Evaluate senterline
             senterline_u(uv)
             senterline_p(pv)
             senterline_ss(ssv)
-
+            
             # Evaluate at the wall
             wall_p(pv)
             wall_wss(ssv)
-
+            
             # Evaluate for each slice
             for i in range(len(slices_u)):
                 slices_u[i](uv)
                 slices_ss[i](ssv)
+
         else:
             u_prev.assign(uv)
 
@@ -219,7 +219,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         uv.assign(project(u_, Vv))
         pv.assign(project(p_, Pv))
         ssv = stress(uv)
-
+        
         # Evaluate senterline
         senterline_u(uv)
         senterline_p(pv)
@@ -264,13 +264,15 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
 
         # Save data from slices
         for i in range(len(slices_u)):
+            print("Slice at wall")
             slices_u[i](uv)
             info = write_data(info, slices_u[i], slices_points[i],
                               "Axial velocity at z=%f" % z[i])
 
         for i in range(len(slices_ss)):
-            slice[i](uv)
-            info = write_data(info, slice, "Axial share stress at z=%d" % z[i])
+            slices_ss[i](ssv)
+            info = write_data(info, slices_ss[i], slices_points[i], 
+                              "Axial share stress at z=%d" % z[i])
 
         # Saving the flux
         info.write("Flux at each slice\n")
@@ -278,9 +280,9 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         for z_ in [-0.18269] + z + [0.32]:
             info.write("%e %e\n" % (z_, flux(uv, z=z_)))
 
-        info.close
+        info.close()
         kill = open(folder + '/killoasis', 'w')
-        kill.close
+        kill.close()
 
 
 def write_overhead(File, dt, T, hmin, Re, hmax):
