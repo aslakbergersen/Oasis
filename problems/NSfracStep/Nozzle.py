@@ -86,12 +86,14 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
 
     slices_u = []
     slices_ss = []
+    slices_flux = []
     slices_points = []
 
     for i in range(len(z)):
         slices_points.append(linspace(-radius[i], radius[i], 1000))
         eval_points = array([[x, 0, z[i]] for x in slices_points[-1]])
         slices_u.append(StatisticsProbes(eval_points.flatten(), Vv))
+        slices_flux.append(StatisticsProbes(eval_point.flatten(), Vv))
         slices_ss.append(StatisticsProbes(eval_points.flatten(), Pv))
 
     # Setup probes in the centerline and at the wall
@@ -126,43 +128,23 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
     
     # LagrangeInterpolator for later use
     li = LagrangeInterpolator()
+
+    mesh2d = UnitSquareMesh(100,100)
+    W = FunctionSpace(mesh2d, "Lagrange", 1)
+    w = Function(W)
+    normal_2D = Expression(("0", "0", "1"), W)
+
+    # Dict with slices such that z can look up
     
-    # Box as a basis for a slice
-    mesh = BoxMesh(-r1, -r1, -r1, r1, r1, r1, 100, 100, 100)
-    bmesh = BoundaryMesh(mesh, "exterior")
 
-    # Create SubMesh for side at z=0
-    # This will be a UnitSquareMesh with topology dimension 2 in 3 space
-    # dimensions
-    cc = CellFunction('size_t', bmesh, 0)
-    xyplane = AutoSubDomain(lambda x: x[2] < -r1 + DOLFIN_EPS)
-    xyplane.mark(cc, 1)
-    submesh = SubMesh(bmesh, cc, 1)
-
-    # Coordinates for the slice
-    coordinates = submesh.coordinates()
-
-    # Create a FunctionSpace on the submesh
-    Vs = VectorFunctionSpace(submesh, "CG", 1)
-    us = Function(Vs)
-
-    # Normal vector
-    n = project(Expression(("0", "0", "1")), Vs)
-
-    def flux(u, z):
-        # Move slice to z
-        coordinates[:, 2] = z
-
-        # LagrangeInterpolator required in parallel
-        li.interpolate(us, u)
-        
-        # Compute flux
-        return assemble(dot(us, n)*dx)
+    def flux(u, i):
+        w.vector().set_local(slices_flux[i].array())
+        return assamble(dot(w, normal_2d)*dx)
 
     def stress(u):
         def epsilon(u):
             return 0.5*(grad(u) + grad(u).T)
-        return project(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
+        return li.interpolate(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
 
     return dict(uv=Function(Vv), pv=Function(Pv),# ssv=Functon(Pv), 
                 radius=radius, u_diff=Function(Vv), u_prev=Function(Vv), 
