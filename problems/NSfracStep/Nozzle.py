@@ -126,12 +126,6 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
     
     # LagrangeInterpolator for later use
     li = LagrangeInterpolator()
-
-    mesh2d = UnitSquareMesh(100,100)
-    W = FunctionSpace(mesh2d, "Lagrange", 1)
-    w = Function(W)
-    normal_2D = Expression(("0", "0", "1"), W)
-
     us = Function(Pv)
 
     def stress(u):
@@ -149,7 +143,7 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
 
 
 def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
-                  Pv, u_prev, u_, check_steady, flux, slices_points,
+                  Pv, u_prev, u_, check_steady, slices_points,
                   Vv, uv, newfolder, mesh, p_, case, wall_p, wall_wss,
                   z_senterline, folder, senterline_u, senterline_p,
                   senterline_ss, slices_u, slices_ss, z, **NS_namespace):
@@ -167,7 +161,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         diff = norm(u_diff)/norm(uv)
         info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        if diff < 1.5e-2:
+        if diff < 0.5: #1.5e-2:
             pv.assign(project(p_, Pv))
             ssv = stress(uv)
             
@@ -208,7 +202,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
             slices_u[i](uv)
             slices_ss[i](ssv)
 
-    if senterline_u.number_of_evaluations() == 1000:
+    if senterline_u.number_of_evaluations() == 10:
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e.pvd"
                     % (dt, mesh.hmin()))
         file << uv
