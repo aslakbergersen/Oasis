@@ -300,7 +300,6 @@ def write_data(File, probes, points, headline, direction=2):
     File.write("%d\n" % len(array))
     if len(array[1]) == 9:
         for i in range(len(array)):
-            print(array[i])
             File.write("%e %e\n" % (points[i], array[i][2]))  
     else:
         for i in range(len(array)):
