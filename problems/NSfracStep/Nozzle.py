@@ -86,14 +86,12 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
 
     slices_u = []
     slices_ss = []
-    slices_flux = []
     slices_points = []
 
     for i in range(len(z)):
         slices_points.append(linspace(-radius[i], radius[i], 1000))
         eval_points = array([[x, 0, z[i]] for x in slices_points[-1]])
         slices_u.append(StatisticsProbes(eval_points.flatten(), Vv))
-        slices_flux.append(StatisticsProbes(eval_point.flatten(), Vv))
         slices_ss.append(StatisticsProbes(eval_points.flatten(), Pv))
 
     # Setup probes in the centerline and at the wall
@@ -134,17 +132,12 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
     w = Function(W)
     normal_2D = Expression(("0", "0", "1"), W)
 
-    # Dict with slices such that z can look up
-    
-
-    def flux(u, i):
-        w.vector().set_local(slices_flux[i].array())
-        return assamble(dot(w, normal_2d)*dx)
+    us = Function(Pv)
 
     def stress(u):
         def epsilon(u):
             return 0.5*(grad(u) + grad(u).T)
-        return li.interpolate(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
+        return li.interpolate(us, 2*nu*sqrt(inner(epsilon(u),epsilon(u))))
 
     return dict(uv=Function(Vv), pv=Function(Pv),# ssv=Functon(Pv), 
                 radius=radius, u_diff=Function(Vv), u_prev=Function(Vv), 
@@ -152,7 +145,7 @@ def pre_solve_hook(velocity_degree, mesh, pressure_degree, V, nu, **NS_namesepac
                 senterline_p=senterline_p, senterline_ss=senterline_ss, 
                 Pv=Pv, z_senterline=z_senterline, stress=stress,
                 slices_u=slices_u, slices_points=slices_points,
-                slices_ss=slices_ss, z=z, flux=flux)
+                slices_ss=slices_ss, z=z)
 
 
 def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
@@ -168,7 +161,6 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
                % (dt, mesh.hmin(), tstep))
         file << uv
-        print(flux(uv, -0.1))
 
         uv.assign(project(u_, Vv))
         u_diff.assign(uv - u_prev)
@@ -255,12 +247,6 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
             slices_ss[i](ssv)
             info = write_data(info, slices_ss[i], slices_points[i], 
                               "Axial share stress at z=%d" % z[i])
-
-        # Saving the flux
-        info.write("Flux at each slice\n")
-        info.write("%d\n" % (len(z) +2))
-        for z_ in [-0.18269] + z + [0.32]:
-            info.write("%e %e\n" % (z_, flux(uv, z=z_)))
 
         info.close()
         kill = open(folder + '/killoasis', 'w')
