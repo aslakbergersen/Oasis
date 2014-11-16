@@ -14,7 +14,7 @@ recursive_update(NS_parameters,
                       case=500,
                       save_tstep=1000,
                       checkpoint=1000,
-                      check_steady=1,
+                      check_steady=100,
                       velocity_degree=1,
                       mesh_path="mesh/mesh_medium.xml",  #"mesh/8M_nozzle.xml",
                       print_intermediate_info=1000,
@@ -193,7 +193,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
         diff = norm(u_diff)/norm(uv)
         info_red("Diff: %1.4e   time: %f" % (diff, tstep*dt))
 
-        if diff < 1.5e-2:
+        if diff < 0.5:    #1.5e-2:
             pv.assign(project(p_, Pv))
             ssv = stress(uv)
             
@@ -234,7 +234,7 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
             slices_u[i](uv)
             slices_ss[i](ssv)
 
-    if senterline_u.number_of_evaluations() == 1000:
+    if senterline_u.number_of_evaluations() == 10:
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e.pvd"
                     % (dt, mesh.hmin()))
         file << uv
@@ -264,7 +264,6 @@ def temporal_hook(tstep, info_red, dt, radius, u_diff, pv, stress,
 
         # Save data from slices
         for i in range(len(slices_u)):
-            print("Slice at wall")
             slices_u[i](uv)
             info = write_data(info, slices_u[i], slices_points[i],
                               "Axial velocity at z=%f" % z[i])
@@ -301,7 +300,8 @@ def write_data(File, probes, points, headline, direction=2):
     File.write("%d\n" % len(array))
     if len(array[1]) == 9:
         for i in range(len(array)):
-            File.write("%e %e\n" % (points[i], array[i][3]))  
+            print(array[i])
+            File.write("%e %e\n" % (points[i], array[i][2]))  
     else:
         for i in range(len(array)):
             File.write("%e %e\n" % (points[i], array[i][0]))
