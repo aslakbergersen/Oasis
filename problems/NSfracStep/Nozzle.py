@@ -1,10 +1,11 @@
 from ..NSfracStep import *
 from math import pi
-from os import path
+from os import path, getcwd, mkdir, listdir, remove
 from fenicstools import StatisticsProbes
 from numpy import array, linspace
 import sys
 import numpy as np
+import cPickle
 
 # Values for geometry
 start = -0.18
@@ -18,29 +19,38 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
+restart_folder = "nozzle_results/data/88/Checkpoint"
 
-# Override some problem specific parameters
-recursive_update(NS_parameters,
-                 dict(mu=0.0035,
-                      nu=0.0035 / 1056.,
-                      T=1000,
-                      dt=1E-6,
-                      folder="nozzle_results",
-                      case=3500,
-                      check_steady=100,
-                      save_tstep=1000,
-                      checkpoint=1000,
-                      check_steady=100,
-                      velocity_degree=1,
-                      pressure_degree=1,
-                      mesh_path="mesh/1600K_opt_nozzle.xml",  #"mesh/8M_nozzle.xml",
-                      print_intermediate_info=1000,
-                      use_lumping_of_mass_matrix=True,
-                      low_memory_version=True,
-                      use_krylov_solvers=True,
-                      krylov_solvers=dict(monitor_convergence=False,
+# Update parameters from last run
+if restart_folder is not None:
+    restart_folder = path.join(getcwd(), restart_folder)
+    f = open(path.join(restart_folder, 'params.dat'), 'r')
+    NS_parameters.update(cPickle.load(f))
+    NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt']
+    NS_parameters['restart_folder'] = restart_folder
+    globals().update(NS_parameters)
+else:
+    # Override some problem specific parameters
+    recursive_update(NS_parameters,
+                    dict(mu=0.0035,
+                        nu=0.0035 / 1056.,
+                        T=1000,
+                        dt=1E-6,
+                        folder="nozzle_results",
+                        case=3500,
+                        save_tstep=1000,
+                        checkpoint=1,
+                        check_steady=1,
+                        velocity_degree=1,
+                        pressure_degree=1,
+                        mesh_path="mesh/1600K_opt_nozzle.xml",  #"mesh/8M_nozzle.xml",
+                        print_intermediate_info=1000,
+                        use_lumping_of_mass_matrix=True,
+                        low_memory_version=True,
+                        use_krylov_solvers=True,
+                        krylov_solvers=dict(monitor_convergence=False,
                                           relative_tolerance=1e-8)))
-
+    
 
 def mesh(mesh_path, **NS_namespace):
     return Mesh(mesh_path)
@@ -81,23 +91,24 @@ def create_bcs(V, sys_comp, case, **NS_namespce):
     return bcs
 
 
-def initialize(q_, **NS_namespace):
-    q_['u2'].vector()[:] = 1e-12
+def initialize(q_, restart_folder, **NS_namespace):
+    if restart_folder is None:
+        q_['u2'].vector()[:] = 1e-12
 
 
 def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
-                   folder, **NS_namesepace):
+                folder, newfolder, **NS_namesepace):
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
-                             constrained_domain=constrained_domain)
+                            constrained_domain=constrained_domain)
     Pv = FunctionSpace(mesh, 'CG', pressure_degree,
-                       constrained_domain=constrained_domain)
+                    constrained_domain=constrained_domain)
 
     r_2 = 0.008/0.022685 * r_0
     r_1 = r_0 / 3.
 
     # Location of slices
     z = [-0.088,-0.064, -0.048, -0.02, -0.008, 0.0, \
-         0.008, 0.016, 0.024, 0.032, 0.06, 0.08]
+        0.008, 0.016, 0.024, 0.032, 0.06, 0.08]
     
     # Create a matching list of radius
     radius = []
@@ -148,47 +159,65 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
     initial_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
     wall_p = StatisticsProbes(eval_wall.flatten(), Pv, True)
     wall_wss = StatisticsProbes(eval_wall.flatten(), Pv, True)
-    
+
     # Gather all probes in a dict
     eval_dict = {"wall_p": wall_p,
-                 "wall_ss": wall_wss,
-                 "senterline_ss": senterline_ss,
-                 "senterline_p": senterline_p,
-                 "senterline_u": senterline_u,
-                 "initial_u": initial_u,
-                 "slices_u": slices_u,
-                 "slices_ss": slices_ss}
+                "wall_ss": wall_wss,
+                "senterline_ss": senterline_ss,
+                "senterline_p": senterline_p,
+                "senterline_u": senterline_u,
+                "initial_u": initial_u,
+                "slices_u": slices_u,
+                "slices_ss": slices_ss}
 
-    # LagrangeInterpolator for later use
-    li = LagrangeInterpolator()
-    us = Function(Pv)
+    if restart_folder is None:
+        if MPI.rank(mpi_comm_world()) == 0:
+            # Print header
+            u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
+            print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
+                         inlet_string, mesh.num_cells(), folder)
+
+            # Create stats folder
+            mkdir(path.join(newfolder, "Stats"))
+   
+    else:
+        # Restart stats
+        files = listdir(path.join(newfolder, "Stats"))
+        if files != []:
+            for file in files:
+                file_split = file.split("_")
+                key = file_split[0] + "_" + file_split[1]
+                num_eval = int(file_split[-2])
+                file_path = path.join(newfolder, "Stats", file)
+                arr = np.load(file_path)
+                if "slices" in file:
+                    file_split = file.split("_")
+                    z_point = float(file_split[2])
+                    index = z.index(z_point)
+                    eval_dict[key][index].restart_probes(arr.flatten(), num_eval)
+                else:
+                    eval_dict[key].restart_probes(arr.flatten(), num_eval)
 
     def stress(u):
         def epsilon(u):
             return 0.5*(grad(u) + grad(u).T)
         return project(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
-        #return li.interpolate(us, 2*nu*sqrt(inner(epsilon(u),epsilon(u))))
-
+    
     def norm_l(u, l=2):
         return np.sum(u**l)**(1./l)
-
+    
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
-
-    # Print header
-    if MPI.rank(mpi_comm_world()) == 0:
-        u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
-        print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
-                     inlet_string, mesh.num_cells(), folder)
-
+        
     return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,
                 norm_l=norm_l, eval_dict=eval_dict)
-
-
-def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
-                  norm_l, eval_map, dt, **NS_namespace):
     
+    
+def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
+                norm_l, eval_map, dt, checkpoint, **NS_namespace):
+
+    print tstep
     if (tstep % check_steady == 0 and \
         eval_dict["initial_u"].number_of_evaluations() != 0) or \
         tstep == 1:
@@ -200,9 +229,9 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         prev_norm = norm_l(initial_u.array()/(num + bonus))
         initial_u(u_[0], u_[1], u_[2])
         new_norm = norm_l(initial_u.array()/(num + 1))
-        
-        # TODO: Appropriate criteria?
-        if abs(prev_norm - new_norm) / new_norm < 0.001:
+        print abs(prev_norm - new_norm) / new_norm        
+        # Max norm is perhaps better suited?
+        if abs(prev_norm - new_norm) / new_norm < 1:
             eval_dict["initial_u"].clear()
         
     if eval_dict["initial_u"].number_of_evaluations() == 0:
@@ -212,6 +241,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
         file << eval_map["u"]
+
+        prev_norm = norm_l(eval_dict["senterline_u"].array())
 
         # Sample velocity, pressure and stress
         for key, value in eval_dict.iteritems():
@@ -223,18 +254,37 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
             elif key != "initial_u":
                 value(sample)
 
-        if 1:    # TODO: some_critiria
-            for key, value in eval_dict.iteritems():
-                if "slices" in key:
-                    for val in value:
-                        tmp = val.get_probe(1).coordinates()[-1] 
-                        val.array(filename=path.join(newfolder, key + "_" + tmp))
-                elif key != "initial_u":
-                    value.array(filename=path.join(newfolder, key))
+        new_norm = norm_l(eval_dict["senterline_u"].array())
+
+        # Max norm is perhaps better suited?
+        if abs(new_norm - prev_norm) / new_norm < 0.0001:
+            dump_stats(eval_dict["senterline_u"].number_of_evaluations(), 
+                       eval_dict, newfolder)
 
             if MPI.rank(mpi_comm_world()) == 0:
                 kill = open(folder + '/killoasis', 'w')
                 kill.close()
+
+    if tstep % checkpoint == 0:
+        print "Number of evaluations:", eval_dict["senterline_u"].number_of_evaluations()
+        dump_stats(eval_dict["senterline_u"].number_of_evaluations(),
+                   eval_dict, newfolder)
+
+def dump_stats(num_eval, eval_dict, newfolder):
+    filepath = path.join(newfolder, "Stats")
+    if listdir(filepath) != []:
+        if MPI.rank(mpi_comm_world()) == 0:
+            for file in listdir(filepath):
+                remove_path = path.join(filepath, file)
+                remove(remove_path)
+    MPI.barrier(mpi_comm_world())
+    for key, value in eval_dict.iteritems():
+        if "slices" in key:
+            for val in value:
+                z_point = str(val.get_probe(1).coordinates()[-1])
+                val.array(filename=path.join(filepath, key + "_" + z_point + "_" + str(num_eval)))
+        elif key != "initial_u":
+            value.array(filename=path.join(filepath, key + "_" + str(num_eval)))
 
 
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
