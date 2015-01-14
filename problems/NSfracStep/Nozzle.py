@@ -6,6 +6,7 @@ from numpy import array, linspace
 import sys
 import numpy as np
 import cPickle
+from mpi4py.MPI import COMM_WORLD as comm
 
 # Values for geometry
 start = -0.18
@@ -19,7 +20,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = "nozzle_results/data/88/Checkpoint"
+restart_folder = None #"nozzle_results/data/88/Checkpoint"
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -33,17 +34,18 @@ else:
     # Override some problem specific parameters
     recursive_update(NS_parameters,
                     dict(mu=0.0035,
+                        rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=1E-6,
+                        dt=4E-5,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
                         checkpoint=1,
-                        check_steady=1,
+                        check_steady=100,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/1600K_opt_nozzle.xml",  #"mesh/8M_nozzle.xml",
+                        mesh_path="mesh/1600K_opt_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
@@ -96,12 +98,13 @@ def initialize(q_, restart_folder, **NS_namespace):
         q_['u2'].vector()[:] = 1e-12
 
 
-def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
-                folder, newfolder, **NS_namesepace):
+def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, mu, case,
+                folder, newfolder, mesh_path, **NS_namesepace):
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
                             constrained_domain=constrained_domain)
     Pv = FunctionSpace(mesh, 'CG', pressure_degree,
-                    constrained_domain=constrained_domain)
+                       constrained_domain=constrained_domain)
+    DG = FunctionSpace(mesh, 'DG', 0)
 
     r_2 = 0.008/0.022685 * r_0
     r_1 = r_0 / 3.
@@ -120,16 +123,15 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
         else:
             radius.append(r_0)
 
-    # List of points in slices
+    # List with probes at each slice
     slices_u = []
     slices_ss = []
-    #slices_points = []
 
     for i in range(len(z)):
         slices_points = linspace(-radius[i], radius[i], 200)
         eval_points = array([[x, 0, z[i]] for x in slices_points])
-        slices_u.append(StatisticsProbes(eval_points.flatten(), Vv, False))
-        slices_ss.append(StatisticsProbes(eval_points.flatten(), Pv, True))
+        slices_u.append([StatisticsProbes(eval_points.flatten(), Vv, False), z[i]])
+        slices_ss.append([StatisticsProbes(eval_points.flatten(), Pv, True), z[i]])
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start, stop, 10000)
@@ -175,7 +177,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
             # Print header
             u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
             print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
-                         inlet_string, mesh.num_cells(), folder)
+                         inlet_string, mesh.num_cells(), folder, mesh_path)
 
             # Create stats folder
             mkdir(path.join(newfolder, "Stats"))
@@ -194,30 +196,37 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, nu, case,
                     file_split = file.split("_")
                     z_point = float(file_split[2])
                     index = z.index(z_point)
-                    eval_dict[key][index].restart_probes(arr.flatten(), num_eval)
+                    eval_dict[key][index][0].restart_probes(arr.flatten(), num_eval)
                 else:
                     eval_dict[key].restart_probes(arr.flatten(), num_eval)
 
     def stress(u):
         def epsilon(u):
             return 0.5*(grad(u) + grad(u).T)
-        return project(2*nu*sqrt(inner(epsilon(u),epsilon(u))), Pv)
+        return project(2*mu*sqrt(inner(epsilon(u),epsilon(u))), DG)
     
-    def norm_l(u, l=2):
-        return np.sum(u**l)**(1./l)
+    def norm_l(u, scale, l=2):
+        # Runs in series, so np. instead of MPI. ?
+        if MPI.rank(mpi_comm_world()) == 0:
+            u = u / scale
+            if l == "max":
+                return np.max(abs(u))
+            else:
+                return np.sum(u**l)**(1./l)
+        else:
+            return 0
     
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
         
-    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,
+    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG,
                 norm_l=norm_l, eval_dict=eval_dict)
     
     
 def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
-                norm_l, eval_map, dt, checkpoint, **NS_namespace):
+                norm_l, eval_map, dt, checkpoint, nu, mu, DG, **NS_namespace):
 
-    print tstep
     if (tstep % check_steady == 0 and \
         eval_dict["initial_u"].number_of_evaluations() != 0) or \
         tstep == 1:
@@ -226,12 +235,25 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         initial_u = eval_dict["initial_u"]
         num = initial_u.number_of_evaluations()
         bonus = 1 if num == 0 else 0
-        prev_norm = norm_l(initial_u.array()/(num + bonus))
+
+        arr = initial_u.array()
+        prev_norm = norm_l(arr, num + bonus)
         initial_u(u_[0], u_[1], u_[2])
-        new_norm = norm_l(initial_u.array()/(num + 1))
-        print abs(prev_norm - new_norm) / new_norm        
+        arr = initial_u.array()
+        new_norm = norm_l(arr, num + 1)
+
+        prev_norm = comm.bcast(prev_norm, root=0)
+        new_norm = comm.bcast(new_norm, root=0)
         # Max norm is perhaps better suited?
-        if abs(prev_norm - new_norm) / new_norm < 1:
+        if MPI.rank(mpi_comm_world()) == 0:
+            print "Condition:", abs(prev_norm - new_norm) / new_norm < 0.001,
+            print "On timestep:", tstep,
+            print "New norm:", new_norm,
+            print "Prev norm:", prev_norm,
+            print "Relativ diff:", abs(prev_norm - new_norm) / new_norm
+        if abs(prev_norm - new_norm) / new_norm < 0.001:
+            if MPI.rank(mpi_comm_world()) == 0:
+                print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict["initial_u"].clear()
         
     if eval_dict["initial_u"].number_of_evaluations() == 0:
@@ -242,22 +264,52 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                     % (dt, mesh.hmin(), tstep))
         file << eval_map["u"]
 
-        prev_norm = norm_l(eval_dict["senterline_u"].array())
+        #plot(ssv, interactive=True)
 
-        # Sample velocity, pressure and stress
+        num = eval_dict["senterline_u"].number_of_evaluations()
+        bonus = 1 if num == 0 else 0
+        arr = eval_dict["senterline_u"].array()
+        prev_norm = norm_l(arr, num + bonus)
+
         for key, value in eval_dict.iteritems():
             sample = eval_map[key.split("_")[-1]]
             sample = sample if not type(sample) == type(lambda x: 1) else ssv
             if "slices" in key:
                 for val in value:
-                    val(sample)
+                    val[0](sample)
             elif key != "initial_u":
                 value(sample)
+        
+        arr = eval_dict["senterline_u"].array()
+        new_norm = norm_l(arr, num+1)
 
-        new_norm = norm_l(eval_dict["senterline_u"].array())
+        prev_norm = comm.bcast(prev_norm, root=0)
+        new_norm = comm.bcast(new_norm, root=0)
+
+        #TODO: What about the (<ee>) mean?
+        nu = Constant(nu)
+        mu = Constant(mu)
+        
+        epsilon = project(ssv / (2*mu) * sqrt(nu*2), DG)
+        
+        time_scale = project(sqrt(sqrt(nu) * epsilon), DG)
+        length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
+        velocity_scale = project(sqrt(nu) / epsilon, DG)
+ 
+        file = File(newfolder + "/VTK/nozzle_length_scale_%0.2e_%0.2e_%06d.pvd" \
+                    % (dt, mesh.hmin(), tstep))
+        file << length_scale
+
+        file = File(newfolder + "/VTK/nozzle_time_scale_%0.2e_%0.2e_%06d.pvd" \
+                    % (dt, mesh.hmin(), tstep))
+        file << time_scale
+
+        file = File(newfolder + "/VTK/nozzle_velocity_scale_%0.2e_%0.2e_%06d.pvd" \
+                    % (dt, mesh.hmin(), tstep))
+        file << velocity_scale
 
         # Max norm is perhaps better suited?
-        if abs(new_norm - prev_norm) / new_norm < 0.0001:
+        if abs(new_norm - prev_norm) / new_norm < 100:
             dump_stats(eval_dict["senterline_u"].number_of_evaluations(), 
                        eval_dict, newfolder)
 
@@ -266,29 +318,34 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                 kill.close()
 
     if tstep % checkpoint == 0:
-        print "Number of evaluations:", eval_dict["senterline_u"].number_of_evaluations()
         dump_stats(eval_dict["senterline_u"].number_of_evaluations(),
                    eval_dict, newfolder)
 
+
 def dump_stats(num_eval, eval_dict, newfolder):
     filepath = path.join(newfolder, "Stats")
+    
+    # Remove previous stats files
     if listdir(filepath) != []:
         if MPI.rank(mpi_comm_world()) == 0:
             for file in listdir(filepath):
                 remove_path = path.join(filepath, file)
                 remove(remove_path)
     MPI.barrier(mpi_comm_world())
+
+    # Dump stats, store number of evaluations in filename
     for key, value in eval_dict.iteritems():
         if "slices" in key:
             for val in value:
-                z_point = str(val.get_probe(1).coordinates()[-1])
-                val.array(filename=path.join(filepath, key + "_" + z_point + "_" + str(num_eval)))
+                #z_point = str(val.get_probe(1).coordinates()[-1])
+                val[0].array(filename=path.join(filepath, key + "_" \
+                                       + str(val[-1]) + "_" + str(num_eval)))
         elif key != "initial_u":
             value.array(filename=path.join(filepath, key + "_" + str(num_eval)))
 
 
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
-                 inlet_string, num_cell, folder):
+                 inlet_string, num_cell, folder, mesh_path):
     file = open(path.join(folder, "problem_paramters.txt"), "w")
     file.write("Writing header")
     file.write("=== Nozzle with sudden expanssioni ===")
@@ -301,4 +358,5 @@ def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
     file.write("Inlet=%s" % inlet_string)
     file.write("u_0=%s" % inlet_velocity)
     file.write("Number of cells=%s" % num_cell)
+    file.write("Path to mesh=%s" % mesh_path)
     file.close()
