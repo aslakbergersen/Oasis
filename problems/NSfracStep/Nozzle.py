@@ -8,6 +8,10 @@ import numpy as np
 import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
 
+original_parameters = parameters.copy()
+parameters['DOLFIN_EPS'] = original_parameters['DOLFIN_EPS'] * 100
+parameters['DOLFIN_EPS_LARGE'] = original_parameters['DOLFIN_EPS_LARGE'] * 100
+
 # Values for geometry
 start = -0.18
 stop = 0.12
@@ -41,7 +45,7 @@ else:
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
-                        checkpoint=1,
+                        checkpoint=1000,
                         check_steady=100,
                         velocity_degree=1,
                         pressure_degree=1,
@@ -98,8 +102,12 @@ def initialize(q_, restart_folder, **NS_namespace):
         q_['u2'].vector()[:] = 1e-12
 
 
-def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, mu, case,
-                folder, newfolder, mesh_path, **NS_namesepace):
+def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
+		   mu, case, newfolder, mesh_path, **NS_namesepace):
+
+    if MPI.rank(mpi_comm_world()) == 0:
+        print("Starting pre solve hook")
+
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
                             constrained_domain=constrained_domain)
     Pv = FunctionSpace(mesh, 'CG', pressure_degree,
@@ -127,11 +135,27 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, mu, case,
     slices_u = []
     slices_ss = []
 
+    if MPI.rank(mpi_comm_world()) == 0:
+        print("Starting creating slices")
+
     for i in range(len(z)):
+	if MPI.rank(mpi_comm_world()) == 0:
+	    print("Starting creating slices numer: %d" % i)
         slices_points = linspace(-radius[i], radius[i], 200)
-        eval_points = array([[x, 0, z[i]] for x in slices_points])
+	if MPI.rank(mpi_comm_world()) == 0:
+            print("Done with linspace")
+	eval_points = array([[x, 0, z[i]] for x in slices_points])
+	if MPI.rank(mpi_comm_world()) == 0:
+	    print("Done with array")
         slices_u.append([StatisticsProbes(eval_points.flatten(), Vv, False), z[i]])
+        if MPI.rank(mpi_comm_world()) == 0:
+            print("Append to list and create Statprobes u")
         slices_ss.append([StatisticsProbes(eval_points.flatten(), Pv, True), z[i]])
+	if MPI.rank(mpi_comm_world()) == 0:
+            print("Append to list and create Statprobes u")
+
+    if MPI.rank(mpi_comm_world()) == 0:
+        print("Done creating slices")
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start, stop, 10000)
@@ -155,12 +179,18 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, mu, case,
 
     eval_wall = array(eval_wall)
 
+    if MPI.rank(mpi_comm_world()) == 0:
+	print("Starting to initialize StatisticsProbes")
+
     senterline_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
     senterline_p = StatisticsProbes(eval_senter.flatten(), Pv, True)
     senterline_ss = StatisticsProbes(eval_senter.flatten(), Pv, True)
     initial_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
     wall_p = StatisticsProbes(eval_wall.flatten(), Pv, True)
     wall_wss = StatisticsProbes(eval_wall.flatten(), Pv, True)
+
+    if MPI.rank(mpi_comm_world()) == 0:
+        print("Done initializing StatisticsProbes")
 
     # Gather all probes in a dict
     eval_dict = {"wall_p": wall_p,
@@ -177,7 +207,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, mu, case,
             # Print header
             u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
             print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
-                         inlet_string, mesh.num_cells(), folder, mesh_path)
+                         inlet_string, mesh.num_cells(), new_folder, mesh_path)
 
             # Create stats folder
             mkdir(path.join(newfolder, "Stats"))
@@ -251,7 +281,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
             print "New norm:", new_norm,
             print "Prev norm:", prev_norm,
             print "Relativ diff:", abs(prev_norm - new_norm) / new_norm
-        if abs(prev_norm - new_norm) / new_norm < 0.001:
+        if abs(prev_norm - new_norm) / new_norm < 100:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict["initial_u"].clear()
