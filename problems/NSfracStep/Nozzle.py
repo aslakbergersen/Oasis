@@ -1,15 +1,12 @@
 from ..NSfracStep import *
 from math import pi
-from os import path, getcwd, mkdir, listdir, remove
+from os import path, getcwd, makedirs, listdir, remove
 from fenicstools import StatisticsProbes
 from numpy import array, linspace
 import sys
 import numpy as np
 import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
-
-original_parameters = parameters.copy()
-parameters['form_compiler']['epsilon'] = original_parameters['form_compiler']['epsilon'] * 100
 
 # Values for geometry
 start = -0.18
@@ -44,8 +41,8 @@ else:
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
-                        checkpoint=1000,
-                        check_steady=100,
+                        checkpoint=1,
+                        check_steady=1,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -127,15 +124,27 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
+    # Create stat folder
+    if MPI.rank(mpi_comm_world()) == 0:
+        makedirs(path.join(newfolder, "Stats", "Points"))
+
     # List with probes at each slice
     slices_u = []
     slices_ss = []
+    filepath_points = path.join(newfolder, "Stats", "Points", "z_slice_%s.txt")
 
     for i in range(len(z)):
-        slices_points = linspace(-radius[i], radius[i], 200)
+        # Create eval points
+        slices_points = linspace(-radius[i]+1e-8, radius[i]-1e-8, 200)
 	eval_points = array([[x, 0, z[i]] for x in slices_points])
+
+        # Create probes on slices
         slices_u.append([StatisticsProbes(eval_points.flatten(), Vv, False), z[i]])
         slices_ss.append([StatisticsProbes(eval_points.flatten(), Pv, True), z[i]])
+
+        # Store eval points
+        if MPI.rank(mpi_comm_world()) == 0 and restart_folder is None:
+            eval_points.dump(filepath_points % z[i])
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start, stop, 10000)
@@ -159,6 +168,12 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
     eval_wall = array(eval_wall)
 
+    # Store eval points
+    if MPI.rank(mpi_comm_world()) == 0 and restart_folder is None:
+        eval_senter.dump(path.join(newfolder, "Stats", "Points", "senterline.txt"))
+        eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall.txt"))
+
+    # Create probes on senterline and wall
     senterline_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
     senterline_p = StatisticsProbes(eval_senter.flatten(), Pv, True)
     senterline_ss = StatisticsProbes(eval_senter.flatten(), Pv, True)
@@ -183,8 +198,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
                          inlet_string, mesh.num_cells(), newfolder, mesh_path)
 
-            # Create stats folder
-            mkdir(path.join(newfolder, "Stats"))
    
     else:
         # Restart stats
@@ -203,6 +216,9 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                     eval_dict[key][index][0].restart_probes(arr.flatten(), num_eval)
                 else:
                     eval_dict[key].restart_probes(arr.flatten(), num_eval)
+        else:
+            if MPI.rank(mpi_comm_world()) == 0:
+                print "WARNING:  The stats folder is empty and the stats is not restarted"
 
     def stress(u):
         def epsilon(u):
@@ -269,8 +285,6 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                     % (dt, mesh.hmin(), tstep))
         file << eval_map["u"]
 
-        #plot(ssv, interactive=True)
-
         num = eval_dict["senterline_u"].number_of_evaluations()
         bonus = 1 if num == 0 else 0
         arr = eval_dict["senterline_u"].array()
@@ -301,6 +315,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
         velocity_scale = project(sqrt(nu) / epsilon, DG)
  
+        print "Start file write", MPI.rank(mpi_comm_world())
+
         file = File(newfolder + "/VTK/nozzle_length_scale_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
         file << length_scale
@@ -312,6 +328,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         file = File(newfolder + "/VTK/nozzle_velocity_scale_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
         file << velocity_scale
+        
+        print "Check criteria", MPI.rank(mpi_comm_world())
 
         # Max norm is perhaps better suited?
         if abs(new_norm - prev_norm) / new_norm < 100:
@@ -334,8 +352,9 @@ def dump_stats(num_eval, eval_dict, newfolder):
     if listdir(filepath) != []:
         if MPI.rank(mpi_comm_world()) == 0:
             for file in listdir(filepath):
-                remove_path = path.join(filepath, file)
-                remove(remove_path)
+                if path.isfile(path.join(filepath, file)):
+                    remove_path = path.join(filepath, file)
+                    remove(remove_path)
     MPI.barrier(mpi_comm_world())
 
     # Dump stats, store number of evaluations in filename
