@@ -1,7 +1,6 @@
 from ..NSfracStep import *
 from math import pi
 from os import path, getcwd, makedirs, listdir, remove
-from fenicstools import StatisticsProbes
 from numpy import array, linspace
 import sys
 import numpy as np
@@ -20,7 +19,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None #"nozzle_results/data/88/Checkpoint"
+restart_folder = None #"nozzle_results/data/251/Checkpoint"
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -41,8 +40,8 @@ else:
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
-                        checkpoint=1,
-                        check_steady=1,
+                        checkpoint=1000,
+                        check_steady=10,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -124,27 +123,23 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
-    # Create stat folder
-    if MPI.rank(mpi_comm_world()) == 0:
-        makedirs(path.join(newfolder, "Stats", "Points"))
-
-    # List with probes at each slice
-    slices_u = []
-    slices_ss = []
-    filepath_points = path.join(newfolder, "Stats", "Points", "z_slice_%s.txt")
+    # Container for all evaluations points
+    eval_dict = {}
+    key_u = "slice_u_%s"
+    key_ss = "slice_ss_%s"
 
     for i in range(len(z)):
+        # Set up dict for the slices
+        u_ = key_u % z[i]
+        ss_ = key_ss % z[i]
+        eval_dict[u_]= {'points':0, 'array': zeros((200,3)), 'num': 0}
+        eval_dict[ss_] = {'points':0, 'array': zeros(200), 'num': 0}
+
         # Create eval points
         slices_points = linspace(-radius[i]+1e-8, radius[i]-1e-8, 200)
-	eval_points = array([[x, 0, z[i]] for x in slices_points])
-
-        # Create probes on slices
-        slices_u.append([StatisticsProbes(eval_points.flatten(), Vv, False), z[i]])
-        slices_ss.append([StatisticsProbes(eval_points.flatten(), Pv, True), z[i]])
-
-        # Store eval points
-        if MPI.rank(mpi_comm_world()) == 0 and restart_folder is None:
-            eval_points.dump(filepath_points % z[i])
+        points = array([[x, 0, z[i]] for x in slices_points])
+	eval_dict[u_]["points"] = points
+        eval_dict[ss_]["points"] = points
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start, stop, 10000)
@@ -152,70 +147,64 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     eval_wall = []
 
     cone_length = 0.022685
-
+    eps = 1e-5
     for z_ in z_senterline:
         # first and last cylinder
-        if z_ < -0.62685 or z_ > 0.0:
-            r = r_0
+        if z_ < -0.062685 or z_ > 0.0:
+            r = r_0 - eps
         # cone
-        elif z_ >= -0.62685 and z_ < -0.04:
-            r = r_0 * (abs(z_) - 0.04) / cone_length
+        elif z_ >= -0.062685 and z_ < -0.04:
+            r = r_0 * (abs(z_) - 0.04) / cone_length - eps
         # narrow cylinder
         elif z_ <= 0.0 and z_ >= -0.04:
-            r = r_1
+            r = r_1 - eps
 
         eval_wall.append([0.0, r, z_])
 
     eval_wall = array(eval_wall)
 
-    # Store eval points
-    if MPI.rank(mpi_comm_world()) == 0 and restart_folder is None:
-        eval_senter.dump(path.join(newfolder, "Stats", "Points", "senterline.txt"))
-        eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall.txt"))
-
     # Create probes on senterline and wall
-    senterline_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
-    senterline_p = StatisticsProbes(eval_senter.flatten(), Pv, True)
-    senterline_ss = StatisticsProbes(eval_senter.flatten(), Pv, True)
-    initial_u = StatisticsProbes(eval_senter.flatten(), Vv, False)
-    wall_p = StatisticsProbes(eval_wall.flatten(), Pv, True)
-    wall_wss = StatisticsProbes(eval_wall.flatten(), Pv, True)
-
-    # Gather all probes in a dict
-    eval_dict = {"wall_p": wall_p,
-                "wall_ss": wall_wss,
-                "senterline_ss": senterline_ss,
-                "senterline_p": senterline_p,
-                "senterline_u": senterline_u,
-                "initial_u": initial_u,
-                "slices_u": slices_u,
-                "slices_ss": slices_ss}
+    eval_dict["senterline_u"] = {"points":eval_senter, 
+                                 "array": zeros((10000,3)),
+                                 "num": 0}
+    eval_dict["senterline_p"] = {"points":eval_senter,
+                                 "array": zeros(10000),
+                                 "num": 0}
+    eval_dict["senterline_ss"] = {"points":eval_senter,
+                                  "array": zeros(10000),
+                                  "num": 0}
+    eval_dict["initial_u"] = {"points":eval_senter,
+                                 "array": zeros((10000,3)),
+                                 "num": 0}
+    eval_dict["wall_p"] = {"points":eval_wall,
+                           "array": zeros(10000),
+                           "num": 0}
+    eval_dict["wall_ss"] = {"points":eval_wall,
+                            "array": zeros(10000),
+                            "num": 0}
 
     if restart_folder is None:
+        # Print header
         if MPI.rank(mpi_comm_world()) == 0:
-            # Print header
             u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
             print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
                          inlet_string, mesh.num_cells(), newfolder, mesh_path)
 
-   
+            # Create Stats folder
+            makedirs(path.join(newfolder, "Stats"))
+
     else:
         # Restart stats
         files = listdir(path.join(newfolder, "Stats"))
         if files != []:
             for file in files:
                 file_split = file.split("_")
-                key = file_split[0] + "_" + file_split[1]
-                num_eval = int(file_split[-2])
-                file_path = path.join(newfolder, "Stats", file)
-                arr = np.load(file_path)
-                if "slices" in file:
-                    file_split = file.split("_")
-                    z_point = float(file_split[2])
-                    index = z.index(z_point)
-                    eval_dict[key][index][0].restart_probes(arr.flatten(), num_eval)
-                else:
-                    eval_dict[key].restart_probes(arr.flatten(), num_eval)
+                key = "_".join(file_split[:-1])
+                arr = np.load(path.join(newfolder, "Stats", file))
+                eval_dict[key]["array"] = arr
+                eval_dict[key]["num"] = int(file_split[-1])
+                if key == "initial_u":
+                    eval_dict.pop("initial_u")
         else:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "WARNING:  The stats folder is empty and the stats is not restarted"
@@ -225,16 +214,11 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             return 0.5*(grad(u) + grad(u).T)
         return project(2*mu*sqrt(inner(epsilon(u),epsilon(u))), DG)
     
-    def norm_l(u, scale, l=2):
-        # Runs in series, so np. instead of MPI. ?
-        if MPI.rank(mpi_comm_world()) == 0:
-            u = u / scale
-            if l == "max":
-                return np.max(abs(u))
-            else:
-                return np.sum(u**l)**(1./l)
+    def norm_l(u, l=2):
+        if l == "max":
+            return np.max(abs(u.flatten()))
         else:
-            return 0
+            return np.sum(u**l)**(1./l)
     
     uv=Function(Vv)
     pv=Function(Pv)
@@ -246,66 +230,60 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
 def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, mu, DG, **NS_namespace):
-
-    if (tstep % check_steady == 0 and \
-        eval_dict["initial_u"].number_of_evaluations() != 0) or \
-        tstep == 1:
-        
+    print tstep
+    if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Compare the norm of the stats
-        initial_u = eval_dict["initial_u"]
-        num = initial_u.number_of_evaluations()
+        initial_u = eval_dict["nfo
+                        if MPI.rank(mpi_comm_world()) == 0:
+                                    print "Condition:", norm < 1,
+                                                print "On timestep:", tstep,
+                                                            print "Norm:",
+                                                            norm,
+                                                                        print
+                                                                        "Relativ
+                                                                        diff:",
+                                                                        norminitial_u"]["array"].copy()
+            irint "Relativ diff:", norm
+        num = eval_dict["initial_u"]["num"]
         bonus = 1 if num == 0 else 0
 
-        arr = initial_u.array()
-        prev_norm = norm_l(arr, num + bonus)
-        initial_u(u_[0], u_[1], u_[2])
-        arr = initial_u.array()
-        new_norm = norm_l(arr, num + 1)
+        # Evaluate points
+        evaluate_points(eval_dict, eval_map, u=u_)
+        
+        # Check the max norm of the difference
+        arr = eval_dict["initial_u"]["array"] / (num+1) - initial_u / (num+bonus)
+        norm = norm_l(arr, l="max")
 
-        prev_norm = comm.bcast(prev_norm, root=0)
-        new_norm = comm.bcast(new_norm, root=0)
-
-        # Max norm is perhaps better suited?
+        # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", abs(prev_norm - new_norm) / new_norm < 0.001,
+            print "Condition:", norm < 1,
             print "On timestep:", tstep,
-            print "New norm:", new_norm,
-            print "Prev norm:", prev_norm,
-            print "Relativ diff:", abs(prev_norm - new_norm) / new_norm
-        if abs(prev_norm - new_norm) / new_norm < 100:
+            print "Norm:", norm,
+
+        # Initial conditions is "washed away"
+        if norm < 1:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
-            eval_dict["initial_u"].clear()
+            eval_dict.pop("initial_u")
         
-    if eval_dict["initial_u"].number_of_evaluations() == 0:
+    if not eval_dict.has_key("initial_u"):
+        # Project velocity, pressure and stress
         eval_map["u"].assign(project(u_, Vv))
         eval_map["p"].assign(project(p_, Pv))
         ssv = eval_map["ss"](eval_map["u"])
-        file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep))
-        file << eval_map["u"]
 
-        num = eval_dict["senterline_u"].number_of_evaluations()
+        # Variables for comparision of stats
+        num = eval_dict["senterline_u"]["num"]
         bonus = 1 if num == 0 else 0
-        arr = eval_dict["senterline_u"].array()
-        prev_norm = norm_l(arr, num + bonus)
+        arr = eval_dict["senterline_u"]["array"].copy()
 
-        for key, value in eval_dict.iteritems():
-            sample = eval_map[key.split("_")[-1]]
-            sample = sample if not type(sample) == type(lambda x: 1) else ssv
-            if "slices" in key:
-                for val in value:
-                    val[0](sample)
-            elif key != "initial_u":
-                value(sample)
-        
-        arr = eval_dict["senterline_u"].array()
-        new_norm = norm_l(arr, num+1)
+        evaluate_points(eval_dict, eval_map, u=ssv)
 
-        prev_norm = comm.bcast(prev_norm, root=0)
-        new_norm = comm.bcast(new_norm, root=0)
+        #TODO: Compute the norm every time step?
+        arr = eval_dict["senterline_u"]["array"] / (num+1) - arr/(num+bonus)
+        norm = norm_l(arr, l="max")
 
-        #TODO: What about the (<ee>) mean?
+        # Compute scales for mesh evaluation
         nu = Constant(nu)
         mu = Constant(mu)
         
@@ -315,7 +293,10 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
         velocity_scale = project(sqrt(nu) / epsilon, DG)
  
-        print "Start file write", MPI.rank(mpi_comm_world())
+        # Store vtk files for post prosess in paraview 
+        file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
+                    % (dt, mesh.hmin(), tstep))
+        file << eval_map["u"]
 
         file = File(newfolder + "/VTK/nozzle_length_scale_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
@@ -329,23 +310,27 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                     % (dt, mesh.hmin(), tstep))
         file << velocity_scale
         
-        print "Check criteria", MPI.rank(mpi_comm_world())
+        # Print info
+        if MPI.rank(mpi_comm_world()) == 0:
+            print "Condition:", norm < 1,
+            print "On timestep:", tstep,
+            print "Norm:", norm,
 
-        # Max norm is perhaps better suited?
-        if abs(new_norm - prev_norm) / new_norm < 100:
-            dump_stats(eval_dict["senterline_u"].number_of_evaluations(), 
-                       eval_dict, newfolder)
+        # Check if stats have stabilized
+        if norm < 1:
+            dump_stats(eval_dict, newfolder)
 
+            # Clean kill of program
             if MPI.rank(mpi_comm_world()) == 0:
                 kill = open(folder + '/killoasis', 'w')
                 kill.close()
+            MPI.barrier(mpi_comm_world())
 
     if tstep % checkpoint == 0:
-        dump_stats(eval_dict["senterline_u"].number_of_evaluations(),
-                   eval_dict, newfolder)
+        dump_stats(eval_dict, newfolder)
 
 
-def dump_stats(num_eval, eval_dict, newfolder):
+def dump_stats(eval_dict, newfolder):
     filepath = path.join(newfolder, "Stats")
     
     # Remove previous stats files
@@ -359,13 +344,29 @@ def dump_stats(num_eval, eval_dict, newfolder):
 
     # Dump stats, store number of evaluations in filename
     for key, value in eval_dict.iteritems():
-        if "slices" in key:
-            for val in value:
-                #z_point = str(val.get_probe(1).coordinates()[-1])
-                val[0].array(filename=path.join(filepath, key + "_" \
-                                       + str(val[-1]) + "_" + str(num_eval)))
-        elif key != "initial_u":
-            value.array(filename=path.join(filepath, key + "_" + str(num_eval)))
+        value["array"].dump(path.join(filepath, key + "_" + str(value["num"])))
+
+
+def evaluate_points(eval_dict, eval_map, u=None):
+    if eval_dict.has_key("initial_u"):
+        initial = eval_dict["initial_u"]
+        for i in range(len(initial["points"])):
+            x = initial["points"][i]
+            try:
+                initial["array"][i] += array([u[0](x), u[1](x), u[2](x)])
+            except:
+                continue
+        initial["num"] += 1
+    else:
+        for key, value in list(eval_dict.iteritems()):
+            sample = eval_map[key.split("_")[1]]
+            sample = sample if not type(sample) == type(lambda x: 1) else u
+            for i in range(len(eval_dict[key])):
+                try:
+                    eval_dict[key]["array"][i] += sample(value["points"][i])
+                except:
+                    continue
+            eval_dict[key]["num"] += 1
 
 
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
