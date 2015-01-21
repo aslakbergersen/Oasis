@@ -133,11 +133,14 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     slices_ss = []
     filepath_points = path.join(newfolder, "Stats", "Points", "z_slice_%s.txt")
 
+
+    eps = 1e-8
     for i in range(len(z)):
         # Create eval points
-        slices_points = linspace(-radius[i]+1e-8, radius[i]-1e-8, 200)
+        slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
 	eval_points = array([[x, 0, z[i]] for x in slices_points])
 
+    	print "Start creating slices", MPI.rank(mpi_comm_world())
         # Create probes on slices
         slices_u.append([StatisticsProbes(eval_points.flatten(), Vv, False), z[i]])
         slices_ss.append([StatisticsProbes(eval_points.flatten(), Pv, True), z[i]])
@@ -146,23 +149,24 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         if MPI.rank(mpi_comm_world()) == 0 and restart_folder is None:
             eval_points.dump(filepath_points % z[i])
 
+    print "Done creating slices"
+
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start, stop, 10000)
     eval_senter = array([[0.0, 0.0, i] for i in z_senterline])
     eval_wall = []
 
     cone_length = 0.022685
-
     for z_ in z_senterline:
         # first and last cylinder
-        if z_ < -0.62685 or z_ > 0.0:
-            r = r_0
+        if z_ < -0.062685 or z_ > 0.0:
+            r = r_0 - eps
         # cone
-        elif z_ >= -0.62685 and z_ < -0.04:
-            r = r_0 * (abs(z_) - 0.04) / cone_length
+        elif z_ >= -0.062685 and z_ < -0.04:
+            r = r_0 * (abs(z_) - 0.04) / cone_length - eps
         # narrow cylinder
         elif z_ <= 0.0 and z_ >= -0.04:
-            r = r_1
+            r = r_1 - eps
 
         eval_wall.append([0.0, r, z_])
 
@@ -315,8 +319,6 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
         velocity_scale = project(sqrt(nu) / epsilon, DG)
  
-        print "Start file write", MPI.rank(mpi_comm_world())
-
         file = File(newfolder + "/VTK/nozzle_length_scale_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
         file << length_scale
@@ -329,8 +331,6 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                     % (dt, mesh.hmin(), tstep))
         file << velocity_scale
         
-        print "Check criteria", MPI.rank(mpi_comm_world())
-
         # Max norm is perhaps better suited?
         if abs(new_norm - prev_norm) / new_norm < 100:
             dump_stats(eval_dict["senterline_u"].number_of_evaluations(), 
