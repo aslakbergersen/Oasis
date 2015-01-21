@@ -40,8 +40,8 @@ else:
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
-                        checkpoint=1000,
-                        check_steady=10,
+                        checkpoint=1,
+                        check_steady=1,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -238,10 +238,10 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         initial_u = eval_dict["initial_u"]["array"].copy()
         num = eval_dict["initial_u"]["num"]
         bonus = 1 if num == 0 else 0
-
+	print "Starting to evaluate"
         # Evaluate points
         evaluate_points(eval_dict, eval_map, u=u_)
-        
+        print "Done evaluating"
         # Check the max norm of the difference
         arr = eval_dict["initial_u"]["array"] / (num+1) - initial_u / (num+bonus)
         norm = norm_l(arr, l="max")
@@ -253,7 +253,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.1:
+        if norm < 10000:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -340,18 +340,29 @@ def dump_stats(eval_dict, newfolder):
 
 
 def evaluate_points(eval_dict, eval_map, u=None):
+    print MPI.rank(mpi_comm_world()), eval_dict.has_key("initial_u")
     if eval_dict.has_key("initial_u"):
         for i in range(len(eval_dict["initial_u"]["points"])):
+            print MPI.rank(mpi_comm_world()), "first line in for-loop"
             x = eval_dict["initial_u"]["points"][i]
+            print MPI.rank(mpi_comm_world()), "before try"
             try:
+		print MPI.rank(mpi_comm_world()), "Starting try"
                 rank = MPI.rank(mpi_comm_world())
+		print MPI.rank(mpi_comm_world()), "Done finding rank"
+                print MPI.rank(mpi_comm_world()), "Point:", x
                 tmp = array([u[0](x), u[1](x), u[2](x)])
+		print MPI.rank(mpi_comm_world()), "Done with try"
             except:
+                print MPI.rank(mpi_comm_world()), "I'm in except"
                 tmp = 0
                 rank = 0
+            print MPI.rank(mpi_comm_world()), "MPI.max(rank)"
             rank = MPI.max(mpi_comm_world(), rank)
+	    print MPI.rank(mpi_comm_world()), "Before eval", rank
             tmp = comm.bcast(tmp, root=rank)
             eval_dict["initial_u"]["array"][i] += tmp
+	print "Done evaluating initial_u"
         eval_dict["initial_u"]["num"] += 1
 
     else:
