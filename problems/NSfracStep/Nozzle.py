@@ -1,6 +1,6 @@
 from ..NSfracStep import *
 from math import pi
-from os import path, getcwd, makedirs, listdir, remove
+from os import path, getcwd, listdir, remove
 from numpy import array, linspace
 import sys
 import numpy as np
@@ -123,10 +123,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
-    if restart_folder is None and MPI.rank(mpi_comm_world()) == 0:
-        # Create Stats folder
-        makedirs(path.join(newfolder, "Stats", "Points"))
-    MPI.barrier(mpi_comm_world())
     # Container for all evaluations points
     eval_dict = {}
     key_u = "slice_u_%s"
