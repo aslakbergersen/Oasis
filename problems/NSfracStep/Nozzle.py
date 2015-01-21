@@ -36,7 +36,7 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=4E-5,
+                        dt=1E-5,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
@@ -196,14 +196,15 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     else:
         # Restart stats
         files = listdir(path.join(newfolder, "Stats"))
+        eval = files[0].split("_")[-1]
         if files != []:
             for file in files:
                 file_split = file.split("_")
                 key = "_".join(file_split[:-1])
                 arr = np.load(path.join(newfolder, "Stats", file))
                 eval_dict[key]["array"] = arr
-                eval_dict[key]["num"] = int(file_split[-1])
-                if key == "initial_u":
+                eval_dict[key]["num"] = eval
+                if key == "initial_u_%s" % eval:
                     eval_dict.pop("initial_u")
         else:
             if MPI.rank(mpi_comm_world()) == 0:
@@ -230,20 +231,11 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
 def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, mu, DG, **NS_namespace):
-    print tstep
+    if MPI.rank(mpi_comm_world()) == 0:
+        print tstep
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Compare the norm of the stats
-        initial_u = eval_dict["nfo
-                        if MPI.rank(mpi_comm_world()) == 0:
-                                    print "Condition:", norm < 1,
-                                                print "On timestep:", tstep,
-                                                            print "Norm:",
-                                                            norm,
-                                                                        print
-                                                                        "Relativ
-                                                                        diff:",
-                                                                        norminitial_u"]["array"].copy()
-            irint "Relativ diff:", norm
+        initial_u = eval_dict["initial_u"]["array"].copy()
         num = eval_dict["initial_u"]["num"]
         bonus = 1 if num == 0 else 0
 
@@ -256,12 +248,12 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 1,
+            print "Condition:", norm < 0.1,
             print "On timestep:", tstep,
-            print "Norm:", norm,
+            print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 1:
+        if norm < 0.1:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -286,13 +278,13 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         # Compute scales for mesh evaluation
         nu = Constant(nu)
         mu = Constant(mu)
-        
+
         epsilon = project(ssv / (2*mu) * sqrt(nu*2), DG)
-        
+
         time_scale = project(sqrt(sqrt(nu) * epsilon), DG)
         length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
         velocity_scale = project(sqrt(nu) / epsilon, DG)
- 
+
         # Store vtk files for post prosess in paraview 
         file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
                     % (dt, mesh.hmin(), tstep))
@@ -314,7 +306,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         if MPI.rank(mpi_comm_world()) == 0:
             print "Condition:", norm < 1,
             print "On timestep:", tstep,
-            print "Norm:", norm,
+            print "Norm:", norm
 
         # Check if stats have stabilized
         if norm < 1:
@@ -349,23 +341,34 @@ def dump_stats(eval_dict, newfolder):
 
 def evaluate_points(eval_dict, eval_map, u=None):
     if eval_dict.has_key("initial_u"):
-        initial = eval_dict["initial_u"]
-        for i in range(len(initial["points"])):
-            x = initial["points"][i]
+        for i in range(len(eval_dict["initial_u"]["points"])):
+            x = eval_dict["initial_u"]["points"][i]
             try:
-                initial["array"][i] += array([u[0](x), u[1](x), u[2](x)])
+                rank = MPI.rank(mpi_comm_world())
+                tmp = array([u[0](x), u[1](x), u[2](x)])
             except:
-                continue
-        initial["num"] += 1
+                tmp = 0
+                rank = 0
+            rank = MPI.max(mpi_comm_world(), rank)
+            tmp = comm.bcast(tmp, root=rank)
+            eval_dict["initial_u"]["array"][i] += tmp
+        eval_dict["initial_u"]["num"] += 1
+
     else:
         for key, value in list(eval_dict.iteritems()):
             sample = eval_map[key.split("_")[1]]
             sample = sample if not type(sample) == type(lambda x: 1) else u
             for i in range(len(eval_dict[key])):
                 try:
-                    eval_dict[key]["array"][i] += sample(value["points"][i])
+                    rank = MPI.rank(mpi_comm_world())
+                    tmp = sample(value["points"][i])
                 except:
-                    continue
+                    tmp = 0
+                    rank = 0
+                rank = MPI.max(mpi_comm_world(), rank)
+                tmp = comm.bcast(tmp, root=rank)
+                eval_dict[key]["array"][i] += tmp
+
             eval_dict[key]["num"] += 1
 
 
