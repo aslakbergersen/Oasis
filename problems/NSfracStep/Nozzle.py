@@ -19,7 +19,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None #"nozzle_results/data/251/Checkpoint"
+restart_folder = "nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
 if restart_folder is not None:
