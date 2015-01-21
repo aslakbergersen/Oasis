@@ -44,7 +44,7 @@ else:
                         check_steady=10,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/1600K_opt_nozzle.xml",
+                        mesh_path= path.join(path.dirfolder(__file__), "mesh/1600K_opt_nozzle.xml"),
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
@@ -310,7 +310,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Check if stats have stabilized
         if norm < 1:
-            dump_stats(eval_dict, newfolder)
+            #dump_stats(eval_dict, newfolder)
 
             # Clean kill of program
             if MPI.rank(mpi_comm_world()) == 0:
