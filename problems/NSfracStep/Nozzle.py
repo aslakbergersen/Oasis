@@ -123,11 +123,16 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
+    if restart_folder is None and MPI.rank(mpi_comm_world()) == 0:
+        # Create Stats folder
+        makedirs(path.join(newfolder, "Stats", "Points"))
+
     # Container for all evaluations points
     eval_dict = {}
     key_u = "slice_u_%s"
     key_ss = "slice_ss_%s"
 
+    eps = 1e-8
     for i in range(len(z)):
         # Set up dict for the slices
         u_ = key_u % z[i]
@@ -136,18 +141,19 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         eval_dict[ss_] = {'points':0, 'array': zeros(200), 'num': 0}
 
         # Create eval points
-        slices_points = linspace(-radius[i]+1e-8, radius[i]-1e-8, 200)
+        slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
         points = array([[x, 0, z[i]] for x in slices_points])
+        points.dump(path.join(newfile, "Stats", "Points", key))
 	eval_dict[u_]["points"] = points
         eval_dict[ss_]["points"] = points
 
     # Setup probes in the centerline and at the wall
-    z_senterline = linspace(start, stop, 10000)
+    z_senterline = linspace(start+eps, stop-eps, 10000)
     eval_senter = array([[0.0, 0.0, i] for i in z_senterline])
+    eval_senter.dump(path.join(newfile, "Stats", "Points", "senterline"))
     eval_wall = []
 
     cone_length = 0.022685
-    eps = 1e-5
     for z_ in z_senterline:
         # first and last cylinder
         if z_ < -0.062685 or z_ > 0.0:
@@ -162,6 +168,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         eval_wall.append([0.0, r, z_])
 
     eval_wall = array(eval_wall)
+    eval_wall.dump(path.join(newfile, "Stats", "Points", "wall"))
 
     # Create probes on senterline and wall
     eval_dict["senterline_u"] = {"points":eval_senter, 
@@ -189,9 +196,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             u_0 = 2*flow_rate[case] / (r_0*r_0*pi)
             print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
                          inlet_string, mesh.num_cells(), newfolder, mesh_path)
-
-            # Create Stats folder
-            makedirs(path.join(newfolder, "Stats"))
 
     else:
         # Restart stats
@@ -326,8 +330,8 @@ def dump_stats(eval_dict, newfolder):
     filepath = path.join(newfolder, "Stats")
     
     # Remove previous stats files
-    if listdir(filepath) != []:
-        if MPI.rank(mpi_comm_world()) == 0:
+    if MPI.rank(mpi_comm_world()) == 0:
+        if listdir(filepath) != []:
             for file in listdir(filepath):
                 if path.isfile(path.join(filepath, file)):
                     remove_path = path.join(filepath, file)
