@@ -318,8 +318,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                 kill.close()
             MPI.barrier(mpi_comm_world())
 
-    if tstep % checkpoint == 0:
-        dump_stats(eval_dict, newfolder)
+    #if tstep % checkpoint == 0:
+    #    dump_stats(eval_dict, newfolder)
 
 
 def dump_stats(eval_dict, newfolder):
