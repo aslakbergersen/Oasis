@@ -36,7 +36,7 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=1E-5,
+                        dt=5E-6,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1E10,
@@ -250,7 +250,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         
         # Check the max norm of the difference
         arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
-               eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["prev_num"]
+               eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["num_prev"]
         norm = norm_l(arr, l="max")
 
         # Update prev 
@@ -280,7 +280,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Check the max norm of the difference
         arr = eval_dict["senterline_u"]["array"] / eval_dict["senterline_u"]["num"] - \
-                eval_dict["senterline_u"]["array_prev"] / eval_dict["senterline_u"]["prev_num"]
+                eval_dict["senterline_u"]["array_prev"] / eval_dict["senterline_u"]["num_prev"]
         #TODO: Compute the norm every time step?
         norm = norm_l(arr, l="max")
 
