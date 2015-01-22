@@ -246,7 +246,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Store vtk files for post prosess in paraview 
         eval_map["u"].assign(project(u_, Vv))
-        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd"v% (tstep))
+        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
         file << eval_map["u"]
 
         # Evaluate points
