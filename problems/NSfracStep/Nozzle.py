@@ -44,7 +44,7 @@ else:
                         check_steady=10,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path= path.join(path.dirname(__file__), "mesh/1600K_opt_nozzle.xml"),
+                        mesh_path="mesh/1600K_opt_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
