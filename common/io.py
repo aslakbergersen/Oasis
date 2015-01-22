@@ -41,7 +41,7 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep, info_red,
         if not restart_folder:
             #makedirs(path.join(newfolder, "Voluviz"))
             makedirs(path.join(newfolder, "Stats", "Points"))
-            #makedirs(path.join(newfolder, "VTK"))
+            makedirs(path.join(newfolder, "VTK"))
             makedirs(path.join(newfolder, "Timeseries"))
             makedirs(path.join(newfolder, "Checkpoint"))
             
