@@ -9,7 +9,7 @@ from mpi4py.MPI import COMM_WORLD as comm
 
 # Values for geometry
 start = -0.18
-stop = 0.12
+stop = 0.18
 r_0 = 0.006
 flow_rate = {  # From FDA
              500: 5.21E-6,
@@ -46,7 +46,7 @@ else:
                         eval_t=10,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/4M_nozzle_uniform.xml",
+                        mesh_path="mesh/1600K_opt_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
@@ -244,8 +244,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         if MPI.rank(mpi_comm_world()) == 0:
             print tstep
         # Store vtk files for post prosess in paraview 
-        file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep)) 
+        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep)) 
         file << eval_map["u"]
 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
