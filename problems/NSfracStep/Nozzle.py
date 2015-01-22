@@ -255,7 +255,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Update prev 
         eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
-        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"].copy()
+        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
@@ -286,7 +286,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Update prev 
         eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
-        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"].copy()
+        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
 
         # TODO: Do this every timestep?
         # Compute scales for mesh evaluation
