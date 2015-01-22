@@ -43,7 +43,7 @@ else:
                         checkpoint_hdf5=1000,
                         checkpoint=1E10,
                         check_steady=300,
-                        eval_t=10,
+                        eval_t=50,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -240,14 +240,15 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
-        eval_map["u"].assign(project(u_, Vv))
         if MPI.rank(mpi_comm_world()) == 0:
             print tstep
-        # Store vtk files for post prosess in paraview 
-        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep)) 
-        file << eval_map["u"]
 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
+        # Store vtk files for post prosess in paraview 
+        eval_map["u"].assign(project(u_, Vv))
+        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd"v% (tstep))
+        file << eval_map["u"]
+
         # Evaluate points
         if tstep % eval_t != 0:
             evaluate_points(eval_dict, eval_map, u=u_)
