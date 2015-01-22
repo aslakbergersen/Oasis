@@ -19,7 +19,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None#"nozzle_results/data/3/Checkpoint"
+restart_folder = None #"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -36,12 +36,13 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=1E-5,
+                        dt=2E-5,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1000,
-                        checkpoint=1,
-                        check_steady=10,
+                        checkpoint_hdf5=1000,
+                        check_steady=300,
+                        eval_t=10,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -169,7 +170,9 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     # Create probes on senterline and wall
     eval_dict["senterline_u"] = {"points":eval_senter, 
                                  "array": zeros((10000,3)),
-                                 "num": 0}
+                                 "num": 0,
+                                 "array_prev": 0,
+                                 "num_prev": 1}
     eval_dict["senterline_p"] = {"points":eval_senter,
                                  "array": zeros(10000),
                                  "num": 0}
@@ -178,7 +181,9 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                                   "num": 0}
     eval_dict["initial_u"] = {"points":eval_senter,
                                  "array": zeros((10000,3)),
-                                 "num": 0}
+                                 "num": 0,
+                                 "array_prev": 0,
+                                 "num_prev": 1}
     eval_dict["wall_p"] = {"points":eval_wall,
                            "array": zeros(10000),
                            "num": 0}
@@ -230,21 +235,24 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
     
 def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
-                norm_l, eval_map, dt, checkpoint, nu, mu, DG, **NS_namespace):
-    if MPI.rank(mpi_comm_world()) == 0:
-        print tstep
-    if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
-        # Compare the norm of the stats
-        initial_u = eval_dict["initial_u"]["array"].copy()
-        num = eval_dict["initial_u"]["num"]
-        bonus = 1 if num == 0 else 0
+                norm_l, eval_map, dt, checkpoint_hdf5, nu, mu, DG, eval_t, **NS_namespace):
 
-        # Evaluate points
+    if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
+
+    if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
+        # Evaluate points
+        if tstep % eval_t != 0:
+            evaluate_points(eval_dict, eval_map, u=u_)
         
         # Check the max norm of the difference
-        arr = eval_dict["initial_u"]["array"] / (num+1) - initial_u / (num+bonus)
+        arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
+               eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["prev_num"]
         norm = norm_l(arr, l="max")
+
+        # Update prev 
+        eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
+        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"].copy()
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
@@ -253,7 +261,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.1:
+        if norm < 0.001:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -264,17 +272,20 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         eval_map["p"].assign(project(p_, Pv))
         ssv = eval_map["ss"](eval_map["u"])
 
-        # Variables for comparision of stats
-        num = eval_dict["senterline_u"]["num"]
-        bonus = 1 if num == 0 else 0
-        arr = eval_dict["senterline_u"]["array"].copy()
-
+        # Evaluate points
         evaluate_points(eval_dict, eval_map, u=ssv)
 
+        # Check the max norm of the difference
+        arr = eval_dict["senterline_u"]["array"] / eval_dict["senterline_u"]["num"] - \
+                eval_dict["senterline_u"]["array_prev"] / eval_dict["senterline_u"]["prev_num"]
         #TODO: Compute the norm every time step?
-        arr = eval_dict["senterline_u"]["array"] / (num+1) - arr/(num+bonus)
         norm = norm_l(arr, l="max")
 
+        # Update prev 
+        eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
+        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"].copy()
+
+        # TODO: Do this every timestep?
         # Compute scales for mesh evaluation
         nu = Constant(nu)
         mu = Constant(mu)
@@ -310,7 +321,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Check if stats have stabilized
         if norm < 1:
-            #dump_stats(eval_dict, newfolder)
+            dump_stats(eval_dict, newfolder)
 
             # Clean kill of program
             if MPI.rank(mpi_comm_world()) == 0:
@@ -318,8 +329,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                 kill.close()
             MPI.barrier(mpi_comm_world())
 
-    #if tstep % checkpoint == 0:
-    #    dump_stats(eval_dict, newfolder)
+    if tstep % checkpoint_hdf5 == 0:
+        dump_stats(eval_dict, newfolder)
 
 
 def dump_stats(eval_dict, newfolder):
