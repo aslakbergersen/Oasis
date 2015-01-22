@@ -39,7 +39,7 @@ else:
                         dt=2E-5,
                         folder="nozzle_results",
                         case=3500,
-                        save_tstep=1000,
+                        save_tstep=1E10,
                         checkpoint_hdf5=1000,
                         checkpoint=1E10,
                         check_steady=300,

@@ -51,10 +51,10 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep, info_red,
     if output_timeseries_as_vector:
         comps = ['p', 'u'] + scalar_components 
         
-    for ui in comps:
-        tstepfiles[ui] = XDMFFile(mpi_comm_world(), path.join(tstepfolder, ui+'_from_tstep_{}.xdmf'.format(tstep)))
-        tstepfiles[ui].parameters["rewrite_function_mesh"] = False
-        tstepfiles[ui].parameters["flush_output"] = True
+    #for ui in comps:
+        #tstepfiles[ui] = XDMFFile(mpi_comm_world(), path.join(tstepfolder, ui+'_from_tstep_{}.xdmf'.format(tstep)))
+        #tstepfiles[ui].parameters["rewrite_function_mesh"] = False
+        #tstepfiles[ui].parameters["flush_output"] = True
     
     return newfolder, tstepfiles
 
