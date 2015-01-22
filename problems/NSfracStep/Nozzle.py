@@ -36,7 +36,7 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=2E-5,
+                        dt=1E-5,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1E10,
@@ -240,6 +240,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
+        if MPI.rank(mpi_comm_world()) == 0:
+            print tstep
 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Evaluate points
