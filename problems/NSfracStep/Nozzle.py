@@ -41,6 +41,7 @@ else:
                         case=3500,
                         save_tstep=1000,
                         checkpoint_hdf5=1000,
+                        checkpoint=1E10
                         check_steady=300,
                         eval_t=10,
                         velocity_degree=1,
