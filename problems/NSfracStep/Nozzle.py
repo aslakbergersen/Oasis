@@ -8,7 +8,7 @@ import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
 
 # Values for geometry
-start = -0.18
+start = -0.12
 stop = 0.18
 r_0 = 0.006
 flow_rate = {  # From FDA
@@ -36,17 +36,17 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=5E-6,
+                        dt=4E-6,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1E10,
-                        checkpoint_hdf5=1000,
+                        checkpoint_hdf5=300,
                         checkpoint=1E10,
                         check_steady=300,
                         eval_t=50,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/1600K_opt_nozzle.xml",
+                        mesh_path="mesh/1600K_finer_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
