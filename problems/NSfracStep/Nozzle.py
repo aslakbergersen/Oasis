@@ -18,7 +18,7 @@ flow_rate = {  # From FDA
              5000: 5.21E-5,
              6500: 6.77E-5
             }
-inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
+inlet_string = 'u_0' # * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
@@ -39,16 +39,15 @@ else:
                         dt=5E-6,
                         folder="nozzle_results",
                         case=3500,
-                        save_tstep=1E10,
-                        checkpoint_hdf5=300,
-                        checkpoint=1E10,
-                        check_steady=30,
+                        save_tstep=1000,
+                        checkpoint=1000,
+                        check_steady=1,
                         eval_t=50,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/old_mesh/8M_nozzle.xml",
+                        mesh_path="mesh/1600K_opt_nozzle.xml",
                         print_intermediate_info=1000,
-                        use_lumping_of_mass_matrix=True,
+                        use_lumping_of_mass_matrix=False,
                         low_memory_version=True,
                         use_krylov_solvers=True,
                         krylov_solvers=dict(monitor_convergence=False,
@@ -265,18 +264,29 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         return assemble(dot(us, n)*dx)
 
     ####################### END ###########################
-
+    
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
-        
-    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG, z=z,
+    eval_map["p"].rename("pressure", "pressure of nozzle")
+    eval_map["u"].rename("velocity", "velocity of nozzle")
+
+    file_u = File(path.join(newfolder, "VTK", "velocity.pvd"))
+    file_p = File(path.join(newfolder, "VTK", "pressure.pvd"))
+    file_ss = File(path.join(newfolder, "VTK", "stress.pvd"))
+    file_l = File(path.join(newfolder, "VTK", "length_scale.pvd"))
+    file_t = File(path.join(newfolder, "VTK", "time_scale.pvd"))
+    file_v = File(path.join(newfolder, "VTK", "velocity_scale.pvd"))
+    files = {"u": file_u, "p": file_p, "ss": file_ss,
+             "t": file_t, "l": file_l, "v": file_v}
+
+    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG, z=z, files=files,
                 norm_l=norm_l, eval_dict=eval_dict, flux=flux)
     
     
-def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
-                norm_l, eval_map, dt, checkpoint_hdf5, nu, z, mu, DG, eval_t,
-                flux, **NS_namespace):
+def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
+                norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
+                files, flux, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -308,12 +318,12 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 0.1,
+            print "Condition:", norm < 1,
             print "On timestep:", tstep,
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.001:
+        if norm < 1:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -323,6 +333,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         eval_map["u"].assign(project(u_, Vv))
         eval_map["p"].assign(project(p_, Pv))
         ssv = eval_map["ss"](eval_map["u"])
+        ssv.rename("stress", "shear stress in nozzle")
 
         # Evaluate points
         evaluate_points(eval_dict, eval_map, u=ssv)
@@ -334,8 +345,8 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         norm = norm_l(arr, l="max")
 
         # Update prev 
-        eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
-        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
+        eval_dict["senterline_u"]["array_prev"] = eval_dict["senterline_u"]["array"].copy()
+        eval_dict["senterline_u"]["num_prev"] = eval_dict["senterline_u"]["num"]
 
         # TODO: Do this every timestep?
         # Compute scales for mesh evaluation
@@ -348,22 +359,16 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
         velocity_scale = project(sqrt(nu) / epsilon, DG)
 
+        time_scale.rename("t", "time scale")
+        length_scale.rename("l", "length scale")
+        velocity_scale.rename("v", "velocity scale")
+
         # Store vtk files for post prosess in paraview 
-        file = File(newfolder + "/VTK/nozzle_velocity_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep))
-        file << eval_map["u"]
-
-        file = File(newfolder + "/VTK/nozzle_length_scale_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep))
-        file << length_scale
-
-        file = File(newfolder + "/VTK/nozzle_time_scale_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep))
-        file << time_scale
-
-        file = File(newfolder + "/VTK/nozzle_velocity_scale_%0.2e_%0.2e_%06d.pvd" \
-                    % (dt, mesh.hmin(), tstep))
-        file << velocity_scale
+        t_ = T * tstep
+        files["u"] << eval_map["u"], t_
+        files["l"] << length_scale, t_
+        files["t"] << time_scale, t_
+        files["v"] << velocity_scale, t_
         
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
@@ -372,7 +377,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
             print "Norm:", norm
 
         # Check if stats have stabilized
-        if norm < 1:
+        if norm < 0.5:
             dump_stats(eval_dict, newfolder)
 
             # Clean kill of program
@@ -381,7 +386,7 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
                 kill.close()
             MPI.barrier(mpi_comm_world())
 
-    if tstep % checkpoint_hdf5 == 0:
+    if tstep % checkpoint == 0:
         dump_stats(eval_dict, newfolder)
 
 
