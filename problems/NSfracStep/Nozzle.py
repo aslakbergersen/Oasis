@@ -36,17 +36,17 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=4E-6,
+                        dt=5E-6,
                         folder="nozzle_results",
                         case=3500,
                         save_tstep=1E10,
                         checkpoint_hdf5=300,
                         checkpoint=1E10,
-                        check_steady=300,
+                        check_steady=30,
                         eval_t=50,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/1600K_finer_nozzle.xml",
+                        mesh_path="mesh/old_mesh/8M_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=True,
                         low_memory_version=True,
@@ -76,8 +76,9 @@ def outlet(x, on_boundary):
     return on_boundary and x[2] > stop - DOLFIN_EPS
 
 
-def create_bcs(V, sys_comp, case, **NS_namespce):
-    u_0 = 2*flow_rate[case] / (r_0*r_0*pi)   # Need to find mesh inlet area
+def create_bcs(V, sys_comp, nu, case, **NS_namespce):
+    u_0 = nu * case / (2*r_0)   # Need to find mesh inlet area
+    print u_0
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
 
     bcs = dict((ui, []) for ui in sys_comp)
@@ -226,17 +227,56 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             return np.max(abs(u.flatten()))
         else:
             return np.sum(u**l)**(1./l)
-    
+
+    ########### ADD FLUX FOR SERIAL TEST ##################
+    # LagrangeInterpolator for later use
+    li = LagrangeInterpolator()
+
+    # Box as a basis for a slice
+    mesh = BoxMesh(-r_1, -r_1, -r_1, r_1, r_1, r_1, 100, 100, 100)
+    bmesh = BoundaryMesh(mesh, "exterior")
+
+    # Create SubMesh for side at z=0
+    # This will be a UnitSquareMesh with topology dimension 2 in 3 space
+    # dimensions
+    cc = CellFunction('size_t', bmesh, 0)
+    xyplane = AutoSubDomain(lambda x: x[2] < -r_1 + DOLFIN_EPS)
+    xyplane.mark(cc, 1)
+    submesh = SubMesh(bmesh, cc, 1)
+
+    # Coordinates for the slice
+    coordinates = submesh.coordinates()
+
+    # Create a FunctionSpace on the submesh
+    Vs = VectorFunctionSpace(submesh, "CG", 1)
+    us = Function(Vs)
+
+    # Normal vector
+    n = project(Expression(("0", "0", "1")), Vs)
+
+    def flux(u, z):
+        # Move slice to z
+        coordinates[:, 2] = z
+
+        # LagrangeInterpolator required in parallel
+        li.interpolate(us, u)
+
+        # Compute flux
+        return assemble(dot(us, n)*dx)
+
+    ####################### END ###########################
+
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
         
-    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG,
-                norm_l=norm_l, eval_dict=eval_dict)
+    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG, z=z,
+                norm_l=norm_l, eval_dict=eval_dict, flux=flux)
     
     
 def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, eval_dict, 
-                norm_l, eval_map, dt, checkpoint_hdf5, nu, mu, DG, eval_t, **NS_namespace):
+                norm_l, eval_map, dt, checkpoint_hdf5, nu, z, mu, DG, eval_t,
+                flux, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -252,6 +292,10 @@ def temporal_hook(u_, p_, newfolder, mesh, folder, check_steady, Vv, Pv, tstep, 
         # Evaluate points
         if tstep % eval_t != 0:
             evaluate_points(eval_dict, eval_map, u=u_)
+
+        print "Flux at each slice"
+        for z_ in [start] + z + [stop]:
+            print "%e %e" % (z_, flux(eval_map["u"], z=z_))
         
         # Check the max norm of the difference
         arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
