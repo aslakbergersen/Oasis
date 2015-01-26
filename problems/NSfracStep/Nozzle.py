@@ -76,7 +76,7 @@ def outlet(x, on_boundary):
 
 
 def create_bcs(V, sys_comp, nu, case, **NS_namespce):
-    u_0 = nu * case / (2*r_0)   # Need to find mesh inlet area
+    u_0 = nu * case / (r_0)   # Need to find mesh inlet area
     print u_0
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
 
@@ -286,7 +286,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
-                files, flux, T, **NS_namespace):
+                files, flux, T, folder, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
