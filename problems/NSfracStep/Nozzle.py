@@ -286,7 +286,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
-                files, flux, **NS_namespace):
+                files, flux, T, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
