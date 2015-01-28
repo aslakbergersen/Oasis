@@ -36,8 +36,8 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=2E-6,
-                        folder="nozzle_results",
+                        dt=1.6E-5,
+                        folder="/mn/hephaistos/storage/aslakwb/nozzle_results",
                         case=2000,
                         save_tstep=1000,
                         checkpoint=1000,
@@ -103,7 +103,7 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     # Find u_0 for 
     u_0 = flow_rate[case] / A_in # For parabollic inlet
     print u_0
-    u_0 = 0.31
+    u_0 = 0.31*7.31
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
     no_slip = Constant(0)
 
