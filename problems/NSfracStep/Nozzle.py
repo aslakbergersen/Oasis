@@ -18,7 +18,7 @@ flow_rate = {  # From FDA
              5000: 5.21E-5,
              6500: 6.77E-5
             }
-inlet_string = 'u_0' # * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
+inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
@@ -38,14 +38,14 @@ else:
                         T=1000,
                         dt=1.6E-5,
                         folder="/mn/hephaistos/storage/aslakwb/nozzle_results",
-                        case=2000,
+                        case=3500,
                         save_tstep=1000,
                         checkpoint=1000,
                         check_steady=2,
                         eval_t=1,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/old_mesh/4M_cylinder.xml",
+                        mesh_path="mesh/1_3M_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=False,
                         low_memory_version=True,
@@ -98,12 +98,8 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
     r_0 = sqrt(A_in / pi)
 
-    print A_in, A_out, A_walls, r_0
-
     # Find u_0 for 
-    u_0 = flow_rate[case] / A_in # For parabollic inlet
-    print u_0
-    u_0 = 0.31*7.31
+    u_0 = flow_rate[case] / A_in * 2  # For parabollic inlet
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
     no_slip = Constant(0)
 
@@ -269,13 +265,25 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     files = {"u": file_u, "p": file_p, "ss": file_ss,
              "t": file_t, "l": file_l, "v": file_v}
 
+    normal = FacetNormal(mesh)
+    Inlet = AutoSubDomain(inlet)
+    Outlet = AutoSubDomain(outlet)
+    Walls = AutoSubDomain(walls)
+    domains = FacetFunction('size_t', mesh, 0)
+
+    # mark domanis
+    Inlet.mark(domains, 1)
+    Outlet.mark(domains, 2)
+    Walls.mark(domains, 3)
+
     return dict(Vv=Vv, Pv=Pv, eval_map=eval_map, DG=DG, z=z, files=files,
-                norm_l=norm_l, eval_dict=eval_dict)
+                norm_l=norm_l, eval_dict=eval_dict, normal=normal,
+                domains=domains)
     
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
-                files, T, folder, **NS_namespace):
+                files, T, folder, normal, domains, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -291,6 +299,13 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
         # Evaluate points
         if tstep % eval_t != 0:
             evaluate_points(eval_dict, eval_map, u=u_)
+
+        inlet_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](1))
+        outlet_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](2))
+        walls_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](3))
+
+        if MPI.rank(mpi_comm_world()) == 0:
+            print inlet_flux, outlet_flux, walls_flux
 
         # Check the max norm of the difference
         arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
