@@ -18,7 +18,7 @@ flow_rate = {  # From FDA
              5000: 5.21E-5,
              6500: 6.77E-5
             }
-inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
+inlet_string = 'u_0' # * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
@@ -45,7 +45,7 @@ else:
                         eval_t=1,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/boundary_nozzle.xml",
+                        mesh_path="mesh/10M_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=False,
                         low_memory_version=True,
@@ -77,27 +77,35 @@ def outlet(x, on_boundary):
     return on_boundary and x[2] > stop - eps_mesh
 
 
-def create_bcs(V, Q, sys_comp, nu, case, mesh, mesh_path, **NS_namespce):
+def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     # Expressions for boundary conditions
     #2 * case * nu / r_0 * 1.11 #nu * case / r_0   # Need to find mesh inlet area
-    no_slip = Constant(0)
-
+    # Mark inlet and outlet
     boundaries = FacetFunction("size_t", mesh)
     boundaries.set_all(0)
     Inlet = AutoSubDomain(inlet)
     Outlet = AutoSubDomain(outlet)
+    Walls = AutoSubDomain(walls)
     Inlet.mark(boundaries, 1)
     Outlet.mark(boundaries, 2)
+    Walls.mark(boundaries, 3)
 
-    #boundaries = MeshFunction("size_t", mesh, mesh_path.replace(".xml","") + "_facet_region.xml")
+    #plot(boundaries, interactive=True)
+
+    # Compute area of inlet and outlet and adjust radius
     A_in = assemble(Constant(1)*ds(mesh)[boundaries](1))
     A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
-    print A_in, A_out
-    #boundaries = mesh.domains().facet_domains()
+    A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
+    r_0 = sqrt(A_in / pi)
 
-    u_0 = flow_rate[case] / A_in * 9 # For parabollic inlet
+    print A_in, A_out, A_walls, r_0
+
+    # Find u_0 for 
+    u_0 = flow_rate[case] / A_in # For parabollic inlet
     print u_0
+    u_0 = 0.31
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
+    no_slip = Constant(0)
 
     bcs = dict((ui, []) for ui in sys_comp)
     bc0 = DirichletBC(V, no_slip, walls)
