@@ -18,7 +18,7 @@ flow_rate = {  # From FDA
              5000: 5.21E-5,
              6500: 6.77E-5
             }
-inlet_string = 'u_0' # * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
+inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
@@ -36,16 +36,16 @@ else:
                         rho=1056.,
                         nu=0.0035 / 1056.,
                         T=1000,
-                        dt=5E-6,
+                        dt=2E-6,
                         folder="nozzle_results",
-                        case=3500,
+                        case=2000,
                         save_tstep=1000,
                         checkpoint=1000,
-                        check_steady=1,
-                        eval_t=50,
+                        check_steady=2,
+                        eval_t=1,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/1600K_opt_nozzle.xml",
+                        mesh_path="mesh/boundary_nozzle.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=False,
                         low_memory_version=True,
@@ -58,37 +58,56 @@ def mesh(mesh_path, **NS_namespace):
     return Mesh(mesh_path)
 
 
-# walls = 0
+eps_mesh = 1e-12
 def walls(x, on_boundary):
     return on_boundary \
-        and x[2] < stop - DOLFIN_EPS \
-        and x[2] > start + DOLFIN_EPS
+        and x[2] < stop - eps_mesh \
+        and x[2] > start + eps_mesh \
+        or x[2] > stop - eps_mesh \
+        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh \
+        or x[2] < start + eps_mesh \
+        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh
 
 
-# inlet = 1
 def inlet(x, on_boundary):
-    return on_boundary and x[2] < start + DOLFIN_EPS
+    return on_boundary and x[2] < start + eps_mesh
 
 
-# outlet = 2
 def outlet(x, on_boundary):
-    return on_boundary and x[2] > stop - DOLFIN_EPS
+    return on_boundary and x[2] > stop - eps_mesh
 
 
-def create_bcs(V, sys_comp, nu, case, **NS_namespce):
-    u_0 = nu * case / (r_0)   # Need to find mesh inlet area
+def create_bcs(V, Q, sys_comp, nu, case, mesh, mesh_path, **NS_namespce):
+    # Expressions for boundary conditions
+    #2 * case * nu / r_0 * 1.11 #nu * case / r_0   # Need to find mesh inlet area
+    no_slip = Constant(0)
+
+    boundaries = FacetFunction("size_t", mesh)
+    boundaries.set_all(0)
+    Inlet = AutoSubDomain(inlet)
+    Outlet = AutoSubDomain(outlet)
+    Inlet.mark(boundaries, 1)
+    Outlet.mark(boundaries, 2)
+
+    #boundaries = MeshFunction("size_t", mesh, mesh_path.replace(".xml","") + "_facet_region.xml")
+    A_in = assemble(Constant(1)*ds(mesh)[boundaries](1))
+    A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
+    print A_in, A_out
+    #boundaries = mesh.domains().facet_domains()
+
+    u_0 = flow_rate[case] / A_in * 9 # For parabollic inlet
     print u_0
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
 
     bcs = dict((ui, []) for ui in sys_comp)
-    bc0 = DirichletBC(V, Constant(0), walls)
+    bc0 = DirichletBC(V, no_slip, walls)
     bc10 = DirichletBC(V, inn, inlet)
-    bc11 = DirichletBC(V, Constant(0), inlet)
-    p2 = DirichletBC(V, Constant(0), outlet)
+    bc11 = DirichletBC(V, no_slip, inlet)
+    p2 = DirichletBC(Q, no_slip, outlet)
 
     bcs['u0'] = [bc0, bc11]
     bcs['u1'] = [bc0, bc11]
-    bcs['u2'] = [bc10, bc0]
+    bcs['u2'] = [bc0, bc10]
     bcs['p'] = [p2]
 
     return bcs
@@ -264,7 +283,16 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         return assemble(dot(us, n)*dx)
 
     ####################### END ###########################
+   
+    #normal = FacetNormal(mesh)
+    #Inlet = AutoSubDomain(inlet)
+    #Outlet = AutoSubDomain(outlet)
+    #domains = FacetFunction('size_t', mesh, 0)
     
+    # mark domanis
+    #Inlet.mark(domains, 1)
+    #Outlet.mark(domains, 2)
+
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
@@ -280,7 +308,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     files = {"u": file_u, "p": file_p, "ss": file_ss,
              "t": file_t, "l": file_l, "v": file_v}
 
-    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map,DG=DG, z=z, files=files,
+    return dict(Vv=Vv, Pv=Pv, eval_map=eval_map, DG=DG, z=z, files=files,
                 norm_l=norm_l, eval_dict=eval_dict, flux=flux)
     
     
@@ -299,6 +327,13 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
         file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
         file << eval_map["u"]
 
+        #ds_sub = Measure('ds')[domains]
+        #inlet_flux = assemble(dot(eval_map["u"], normal)*ds_sub(1))
+        #outlet_flux = assemble(dot(eval_map["u"], normal)*ds_sub(2))
+        #rel_err = (abs(inlet_flux) - abs(outlet_flux)) / abs(inlet_flux)
+        
+        #print "%s: %s      %s: %s" (start, inlet_flux, stop, outlet_flux)
+        
         # Evaluate points
         if tstep % eval_t != 0:
             evaluate_points(eval_dict, eval_map, u=u_)
@@ -443,16 +478,15 @@ def evaluate_points(eval_dict, eval_map, u=None):
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
                  inlet_string, num_cell, folder, mesh_path):
     file = open(path.join(folder, "problem_paramters.txt"), "w")
-    file.write("Writing header")
-    file.write("=== Nozzle with sudden expanssioni ===")
-    file.write("dt=%e" % dt)
-    file.write("hmin=%e" % hmin)
-    file.write("hmax=%s" % hmax)
-    file.write("Re=%d" % Re)
-    file.write("Start=%s" % start)
-    file.write("Stopp=%s" % stopp)
-    file.write("Inlet=%s" % inlet_string)
-    file.write("u_0=%s" % inlet_velocity)
-    file.write("Number of cells=%s" % num_cell)
-    file.write("Path to mesh=%s" % mesh_path)
+    file.write("=== Nozzle with sudden expanssioni ===\n")
+    file.write("dt=%e\n" % dt)
+    file.write("hmin=%e\n" % hmin)
+    file.write("hmax=%s\n" % hmax)
+    file.write("Re=%d\n" % Re)
+    file.write("Start=%s\n" % start)
+    file.write("Stopp=%s\n" % stopp)
+    file.write("Inlet=%s\n" % inlet_string)
+    file.write("u_0=%s\n" % inlet_velocity)
+    file.write("Number of cells=%s\n" % num_cell)
+    file.write("Path to mesh=%s\n" % mesh_path)
     file.close()
