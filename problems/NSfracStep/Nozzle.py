@@ -45,7 +45,7 @@ else:
                         eval_t=1,
                         velocity_degree=1,
                         pressure_degree=1,
-                        mesh_path="mesh/10M_nozzle.xml",
+                        mesh_path="mesh/old_mesh/4M_cylinder.xml",
                         print_intermediate_info=1000,
                         use_lumping_of_mass_matrix=False,
                         low_memory_version=True,
@@ -254,53 +254,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             return np.sum(u**l)**(1./l)
 
-    ########### ADD FLUX FOR SERIAL TEST ##################
-    # LagrangeInterpolator for later use
-    li = LagrangeInterpolator()
-
-    # Box as a basis for a slice
-    mesh = BoxMesh(-r_1, -r_1, -r_1, r_1, r_1, r_1, 100, 100, 100)
-    bmesh = BoundaryMesh(mesh, "exterior")
-
-    # Create SubMesh for side at z=0
-    # This will be a UnitSquareMesh with topology dimension 2 in 3 space
-    # dimensions
-    cc = CellFunction('size_t', bmesh, 0)
-    xyplane = AutoSubDomain(lambda x: x[2] < -r_1 + DOLFIN_EPS)
-    xyplane.mark(cc, 1)
-    submesh = SubMesh(bmesh, cc, 1)
-
-    # Coordinates for the slice
-    coordinates = submesh.coordinates()
-
-    # Create a FunctionSpace on the submesh
-    Vs = VectorFunctionSpace(submesh, "CG", 1)
-    us = Function(Vs)
-
-    # Normal vector
-    n = project(Expression(("0", "0", "1")), Vs)
-
-    def flux(u, z):
-        # Move slice to z
-        coordinates[:, 2] = z
-
-        # LagrangeInterpolator required in parallel
-        li.interpolate(us, u)
-
-        # Compute flux
-        return assemble(dot(us, n)*dx)
-
-    ####################### END ###########################
-   
-    #normal = FacetNormal(mesh)
-    #Inlet = AutoSubDomain(inlet)
-    #Outlet = AutoSubDomain(outlet)
-    #domains = FacetFunction('size_t', mesh, 0)
-    
-    # mark domanis
-    #Inlet.mark(domains, 1)
-    #Outlet.mark(domains, 2)
-
     uv=Function(Vv)
     pv=Function(Pv)
     eval_map = {"p": pv, "ss": stress, "u": uv}
@@ -317,12 +270,12 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
              "t": file_t, "l": file_l, "v": file_v}
 
     return dict(Vv=Vv, Pv=Pv, eval_map=eval_map, DG=DG, z=z, files=files,
-                norm_l=norm_l, eval_dict=eval_dict, flux=flux)
+                norm_l=norm_l, eval_dict=eval_dict)
     
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                 norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
-                files, flux, T, folder, **NS_namespace):
+                files, T, folder, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -335,21 +288,10 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
         file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
         file << eval_map["u"]
 
-        #ds_sub = Measure('ds')[domains]
-        #inlet_flux = assemble(dot(eval_map["u"], normal)*ds_sub(1))
-        #outlet_flux = assemble(dot(eval_map["u"], normal)*ds_sub(2))
-        #rel_err = (abs(inlet_flux) - abs(outlet_flux)) / abs(inlet_flux)
-        
-        #print "%s: %s      %s: %s" (start, inlet_flux, stop, outlet_flux)
-        
         # Evaluate points
         if tstep % eval_t != 0:
             evaluate_points(eval_dict, eval_map, u=u_)
 
-        print "Flux at each slice"
-        for z_ in [start] + z + [stop]:
-            print "%e %e" % (z_, flux(eval_map["u"], z=z_))
-        
         # Check the max norm of the difference
         arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
                eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["num_prev"]
