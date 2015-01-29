@@ -1,11 +1,12 @@
 from ..NSfracStep import *
 from math import pi
-from os import path, getcwd, listdir, remove
+from os import path, getcwd, listdir, remove, system
 from numpy import array, linspace
 import sys
 import numpy as np
 import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
+import subprocess
 
 # Values for geometry
 start = -0.12
@@ -20,6 +21,8 @@ flow_rate = {  # From FDA
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
+machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
+nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -33,24 +36,26 @@ else:
     # Override some problem specific parameters
     recursive_update(NS_parameters,
                     dict(mu=0.0035,
-                        rho=1056.,
-                        nu=0.0035 / 1056.,
-                        T=1000,
-                        dt=1.6E-5,
-                        folder="/mn/hephaistos/storage/aslakwb/nozzle_results",
-                        case=3500,
-                        save_tstep=1000,
-                        checkpoint=1000,
-                        check_steady=2,
-                        eval_t=1,
-                        velocity_degree=1,
-                        pressure_degree=1,
-                        mesh_path="mesh/1_3M_nozzle.xml",
-                        print_intermediate_info=1000,
-                        use_lumping_of_mass_matrix=False,
-                        low_memory_version=True,
-                        use_krylov_solvers=True,
-                        krylov_solvers=dict(monitor_convergence=False,
+                         rho=1056.,
+                         nu=0.0035 / 1056.,
+                         T=1000e10,
+                         dt=3.6E-6,
+                         folder=nozzle_path,
+                         case=3500,
+                         save_tstep=1000e9,
+                         checkpoint=1000e9,
+                         checkstats=1000,
+                         check_steady=300,
+                         eval_t=50,
+                         plot_t=50,
+                         velocity_degree=1,
+                         pressure_degree=1,
+                         mesh_path="mesh/1_3M_nozzle.xml",
+                         print_intermediate_info=1000,
+                         use_lumping_of_mass_matrix=False,
+                         low_memory_version=False,
+                         use_krylov_solvers=True,
+                         krylov_solvers=dict(monitor_convergence=False,
                                           relative_tolerance=1e-8)))
     
 
@@ -123,7 +128,7 @@ def initialize(q_, restart_folder, **NS_namespace):
 
 
 def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
-		   mu, case, newfolder, mesh_path, **NS_namesepace):
+                   mu, case, newfolder, mesh_path, **NS_namesepace):
 
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree,
                             constrained_domain=constrained_domain)
@@ -165,7 +170,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
         points = array([[x, 0, z[i]] for x in slices_points])
         points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
-	eval_dict[u_]["points"] = points
+        eval_dict[u_]["points"] = points
         eval_dict[ss_]["points"] = points
 
     # Setup probes in the centerline and at the wall
@@ -282,8 +287,8 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
-                norm_l, eval_map, dt, checkpoint, nu, z, mu, DG, eval_t,
-                files, T, folder, normal, domains, **NS_namespace):
+                  norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
+                  normal, domains, plot_t, checkstats, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -318,75 +323,78 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 1,
+            print "Condition:", norm < 0.05,
             print "On timestep:", tstep,
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 1:
+        if norm < 0.0001:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
         
     if not eval_dict.has_key("initial_u"):
-        # Project velocity, pressure and stress
-        eval_map["u"].assign(project(u_, Vv))
-        eval_map["p"].assign(project(p_, Pv))
-        ssv = eval_map["ss"](eval_map["u"])
-        ssv.rename("stress", "shear stress in nozzle")
-
         # Evaluate points
         evaluate_points(eval_dict, eval_map, u=ssv)
-
-        # Check the max norm of the difference
-        arr = eval_dict["senterline_u"]["array"] / eval_dict["senterline_u"]["num"] - \
-                eval_dict["senterline_u"]["array_prev"] / eval_dict["senterline_u"]["num_prev"]
-        #TODO: Compute the norm every time step?
-        norm = norm_l(arr, l="max")
-
-        # Update prev 
-        eval_dict["senterline_u"]["array_prev"] = eval_dict["senterline_u"]["array"].copy()
-        eval_dict["senterline_u"]["num_prev"] = eval_dict["senterline_u"]["num"]
-
-        # TODO: Do this every timestep?
-        # Compute scales for mesh evaluation
-        nu = Constant(nu)
-        mu = Constant(mu)
-
-        epsilon = project(ssv / (2*mu) * sqrt(nu*2), DG)
-
-        time_scale = project(sqrt(sqrt(nu) * epsilon), DG)
-        length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
-        velocity_scale = project(sqrt(nu) / epsilon, DG)
-
-        time_scale.rename("t", "time scale")
-        length_scale.rename("l", "length scale")
-        velocity_scale.rename("v", "velocity scale")
-
-        # Store vtk files for post prosess in paraview 
-        t_ = T * tstep
-        files["u"] << eval_map["u"], t_
-        files["l"] << length_scale, t_
-        files["t"] << time_scale, t_
-        files["v"] << velocity_scale, t_
         
-        # Print info
-        if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 1,
-            print "On timestep:", tstep,
-            print "Norm:", norm
+        if tstep % plot_t == 0:
+            # Project velocity, pressure and stress
+            eval_map["u"].assign(project(u_, Vv))
+            eval_map["p"].assign(project(p_, Pv))
+            ssv = eval_map["ss"](eval_map["u"])
+            ssv.rename("stress", "shear stress in nozzle")
 
-        # Check if stats have stabilized
-        if norm < 0.5:
-            dump_stats(eval_dict, newfolder)
+            # Compute scales for mesh evaluation
+            nu = Constant(nu)
+            mu = Constant(mu)
 
-            # Clean kill of program
+            epsilon = project(ssv / (2*mu) * sqrt(nu*2), DG)
+
+            time_scale = project(sqrt(sqrt(nu) * epsilon), DG)
+            length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
+            velocity_scale = project(sqrt(nu) / epsilon, DG)
+
+            time_scale.rename("t", "time scale")
+            length_scale.rename("l", "length scale")
+            velocity_scale.rename("v", "velocity scale")
+
+            # Store vtk files for post prosess in paraview 
+            t_ = T * tstep
+            files["u"] << eval_map["u"], t_
+            files["l"] << length_scale, t_
+            files["t"] << time_scale, t_
+            files["v"] << velocity_scale, t_
+       
+        if tstep % check_steady == 0:
+            # Check the max norm of the difference
+            arr = eval_dict["senterline_u"]["array"] / \
+                  eval_dict["senterline_u"]["num"] - \
+                  eval_dict["senterline_u"]["array_prev"] / \
+                  eval_dict["senterline_u"]["num_prev"]
+
+            norm = norm_l(arr, l="max")
+
+            # Update prev 
+            eval_dict["senterline_u"]["array_prev"] = eval_dict["senterline_u"]["array"].copy()
+            eval_dict["senterline_u"]["num_prev"] = eval_dict["senterline_u"]["num"]
+ 
+            # Print info
             if MPI.rank(mpi_comm_world()) == 0:
-                kill = open(folder + '/killoasis', 'w')
-                kill.close()
-            MPI.barrier(mpi_comm_world())
+                print "Condition:", norm < 0.00001,
+                print "On timestep:", tstep,
+                print "Norm:", norm
 
-    if tstep % checkpoint == 0:
+            # Check if stats have stabilized
+            if norm < 0.00001:
+                dump_stats(eval_dict, newfolder)
+
+                # Clean kill of program
+                if MPI.rank(mpi_comm_world()) == 0:
+                    kill = open(folder + '/killoasis', 'w')
+                    kill.close()
+                MPI.barrier(mpi_comm_world())
+
+    if tstep % checkstats == 0:
         dump_stats(eval_dict, newfolder)
 
 
