@@ -40,7 +40,7 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep, info_red,
     if MPI.rank(mpi_comm_world()) == 0:
         if not restart_folder:
             #makedirs(path.join(newfolder, "Voluviz"))
-            #makedirs(path.join(newfolder, "Stats"))
+            makedirs(path.join(newfolder, "Stats", "Points"))
             #makedirs(path.join(newfolder, "VTK"))
             makedirs(path.join(newfolder, "Timeseries"))
             makedirs(path.join(newfolder, "Checkpoint"))
@@ -153,6 +153,7 @@ def save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components,
             if MPI.rank(mpi_comm_world()) == 0:
                 system('rm {0}'.format(oldfile))
         MPI.barrier(mpi_comm_world())
+        newfile.close()
     if MPI.rank(mpi_comm_world()) == 0 and path.exists(path.join(checkpointfolder, "params_old.dat")):
         system('rm {0}'.format(path.join(checkpointfolder, "params_old.dat")))
         

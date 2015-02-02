@@ -1,6 +1,6 @@
 from ..NSfracStep import *
 from math import pi
-from os import path, getcwd, makedirs, listdir, remove
+from os import path, getcwd, listdir, remove
 from numpy import array, linspace
 import sys
 import numpy as np
@@ -19,7 +19,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None #"nozzle_results/data/251/Checkpoint"
+restart_folder = None#"nozzle_results/data/3/Checkpoint"
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -41,7 +41,7 @@ else:
                         case=3500,
                         save_tstep=1000,
                         checkpoint=1,
-                        check_steady=1,
+                        check_steady=10,
                         velocity_degree=1,
                         pressure_degree=1,
                         mesh_path="mesh/1600K_opt_nozzle.xml",
@@ -123,10 +123,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
-    if restart_folder is None and MPI.rank(mpi_comm_world()) == 0:
-        # Create Stats folder
-        makedirs(path.join(newfolder, "Stats", "Points"))
-
     # Container for all evaluations points
     eval_dict = {}
     key_u = "slice_u_%s"
@@ -143,14 +139,14 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         # Create eval points
         slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
         points = array([[x, 0, z[i]] for x in slices_points])
-        points.dump(path.join(newfile, "Stats", "Points", key))
+        points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
 	eval_dict[u_]["points"] = points
         eval_dict[ss_]["points"] = points
 
     # Setup probes in the centerline and at the wall
     z_senterline = linspace(start+eps, stop-eps, 10000)
     eval_senter = array([[0.0, 0.0, i] for i in z_senterline])
-    eval_senter.dump(path.join(newfile, "Stats", "Points", "senterline"))
+    eval_senter.dump(path.join(newfolder, "Stats", "Points", "senterline"))
     eval_wall = []
 
     cone_length = 0.022685
@@ -168,7 +164,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         eval_wall.append([0.0, r, z_])
 
     eval_wall = array(eval_wall)
-    eval_wall.dump(path.join(newfile, "Stats", "Points", "wall"))
+    eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall"))
 
     # Create probes on senterline and wall
     eval_dict["senterline_u"] = {"points":eval_senter, 
