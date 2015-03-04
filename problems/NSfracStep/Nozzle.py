@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
+nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -39,18 +39,17 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1000e10,
-                         dt=1E-4,
-                         folder="nozzle_results",
+                         dt=3.6E-6,
+                         folder=nozzle_path,
                          case=3500,
-                         save_tstep=1000e9,
-                         checkpoint=1000e9,
-                         checkstats=1000,
-                         check_steady=300,
+                         save_tstep=1000,
+                         checkpoint=1000,
+                         check_steady=5,
                          eval_t=50,
                          plot_t=50,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/nozzle_uniform.xml",
+                         mesh_path="mesh/1M_nozzle.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -64,16 +63,6 @@ def mesh(mesh_path, **NS_namespace):
 
 # This is mesh dependent hmin() / 100 seems to be a good criteria
 eps_mesh = 1e-5
-#def walls(x, on_boundary):
-#    return on_boundary \
-#        and x[2] < stop - eps_mesh \
-#        and x[2] > start + eps_mesh \
-#        or x[2] > stop - eps_mesh \
-#        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh \
-#        or x[2] < start + eps_mesh \
-#        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh
-
-
 def walls(x, on_boundary):
     return on_boundary \
             and ((sqrt(x[0]*x[0] + x[1]*x[1]) > r_0 - eps_mesh) or \
@@ -110,7 +99,7 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
     A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
 
-    print A_in, A_out, A_walls
+    #print A_in, A_out, A_walls
     #sys.exit(0)
     r_0 = sqrt(A_in / pi)
 
@@ -306,7 +295,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
-                  normal, domains, plot_t, checkstats, **NS_namespace):
+                  normal, domains, plot_t, checkpoint, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -412,7 +401,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
                     kill.close()
                 MPI.barrier(mpi_comm_world())
 
-    if tstep % checkstats == 0:
+    if tstep % checkpoint == 0:
         dump_stats(eval_dict, newfolder)
 
 
