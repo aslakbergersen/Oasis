@@ -10,5 +10,5 @@ h = CellVolume(mesh)
 h = (sqrt(2)/12. * h)**(1./3)
 u = project(h, V)
 
-file = File(path.join(path.dirname(__file__), "..", "nozzle_results","Mesh",sys.argv[1] + ".pvd"))
+file = File(path.join(path.dirname(__file__), "..", "nozzle_results", "Mesh", sys.argv[1] + ".pvd"))
 file << u

@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
+#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -39,8 +39,8 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1000e10,
-                         dt=3.6E-6,
-                         folder=nozzle_path,
+                         dt=1E-4,
+                         folder="nozzle_results",
                          case=3500,
                          save_tstep=1000e9,
                          checkpoint=1000e9,
@@ -50,7 +50,7 @@ else:
                          plot_t=50,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1_3M_nozzle.xml",
+                         mesh_path="mesh/nozzle_uniform.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -62,16 +62,22 @@ else:
 def mesh(mesh_path, **NS_namespace):
     return Mesh(mesh_path)
 
+# This is mesh dependent hmin() / 100 seems to be a good criteria
+eps_mesh = 1e-5
+#def walls(x, on_boundary):
+#    return on_boundary \
+#        and x[2] < stop - eps_mesh \
+#        and x[2] > start + eps_mesh \
+#        or x[2] > stop - eps_mesh \
+#        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh \
+#        or x[2] < start + eps_mesh \
+#        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh
 
-eps_mesh = 1e-12
+
 def walls(x, on_boundary):
     return on_boundary \
-        and x[2] < stop - eps_mesh \
-        and x[2] > start + eps_mesh \
-        or x[2] > stop - eps_mesh \
-        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh \
-        or x[2] < start + eps_mesh \
-        and sqrt(x[1]**2 + x[0]**2) > r_0 - eps_mesh
+            and ((sqrt(x[0]*x[0] + x[1]*x[1]) > r_0 - eps_mesh) or \
+            (x[2] > start + eps_mesh and x[2] < stop - eps_mesh))
 
 
 def inlet(x, on_boundary):
@@ -91,22 +97,28 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     Inlet = AutoSubDomain(inlet)
     Outlet = AutoSubDomain(outlet)
     Walls = AutoSubDomain(walls)
-    Inlet.mark(boundaries, 1)
-    Outlet.mark(boundaries, 2)
-    Walls.mark(boundaries, 3)
+    Walls.mark(boundaries, 1)
+    Inlet.mark(boundaries, 2)
+    Outlet.mark(boundaries, 3)
 
+    #plot(boundaries, interactive=True)
+    #sys.exit(0)
     #plot(boundaries, interactive=True)
 
     # Compute area of inlet and outlet and adjust radius
     A_in = assemble(Constant(1)*ds(mesh)[boundaries](1))
     A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
     A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
+
+    print A_in, A_out, A_walls
+    #sys.exit(0)
     r_0 = sqrt(A_in / pi)
 
     # Find u_0 for 
     u_0 = flow_rate[case] / A_in * 2  # For parabollic inlet
     inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
     no_slip = Constant(0)
+    #no_slip_u = Expression(("0", "0", "0"))
 
     bcs = dict((ui, []) for ui in sys_comp)
     bc0 = DirichletBC(V, no_slip, walls)
@@ -285,7 +297,13 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal,
                 domains=domains)
     
-    
+
+#def start_timestep_hook(u_, Vv, newfolder, eval_map, **NS_namespace):
+#    eval_map["u"].assign(project(u_, Vv))
+#    file = File(newfolder + "/VTK/t0.pvd")
+#    file << eval_map["u"] 
+
+
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
                   normal, domains, plot_t, checkstats, **NS_namespace):
