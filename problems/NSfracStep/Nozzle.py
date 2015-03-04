@@ -39,18 +39,17 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1000e10,
-                         dt=3.6E-6,
+                         dt=5.25E-6,
                          folder=nozzle_path,
                          case=3500,
-                         save_tstep=1000e9,
-                         checkpoint=1000e9,
-                         checkstats=1000,
-                         check_steady=300,
+                         save_tstep=1000,
+                         checkpoint=1000,
+                         check_steady=5,
                          eval_t=50,
-                         plot_t=50,
+                         plot_t=500,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1_3M_nozzle.xml",
+                         mesh_path="mesh/1M_nozzle.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -288,7 +287,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
-                  normal, domains, plot_t, checkstats, **NS_namespace):
+                  normal, domains, plot_t, checkpoint, **NS_namespace):
 
     if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
         evaluate_points(eval_dict, eval_map, u=u_)
@@ -394,7 +393,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
                     kill.close()
                 MPI.barrier(mpi_comm_world())
 
-    if tstep % checkstats == 0:
+    if tstep % checkpoint == 0:
         dump_stats(eval_dict, newfolder)
 
 
