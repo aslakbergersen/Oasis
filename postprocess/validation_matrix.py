@@ -1,6 +1,5 @@
-
-map = get_data()
-data = get_variance(map)
+#map = get_data()
+#data = get_variance(map)
 
 def compute_validation_matrix(results, data, filepath)
     error = 0

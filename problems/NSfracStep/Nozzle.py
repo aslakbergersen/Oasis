@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
+#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -39,8 +39,8 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1000e10,
-                         dt=3.6E-6,
-                         folder=nozzle_path,
+                         dt=4.3E-6,
+                         folder="nozzle_results",
                          case=3500,
                          save_tstep=1000,
                          checkpoint=1000,
@@ -49,7 +49,7 @@ else:
                          plot_t=50,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1M_nozzle.xml",
+                         mesh_path="mesh/1M_refined_nozzle.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -330,12 +330,12 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 0.05,
+            print "Condition:", norm < 0.5,
             print "On timestep:", tstep,
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.0001:
+        if norm < 0.5:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -392,7 +392,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
                 print "Norm:", norm
 
             # Check if stats have stabilized
-            if norm < 0.00001:
+            if norm < 0.01:
                 dump_stats(eval_dict, newfolder)
 
                 # Clean kill of program
