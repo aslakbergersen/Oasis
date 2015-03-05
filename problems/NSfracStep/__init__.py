@@ -33,10 +33,13 @@ NS_parameters.update(
   output_timeseries_as_vector = True, # Store velocity as vector in Timeseries 
 
   # Choose LES model and set default parameters
-  les_model = None,       # None, Wale
-  
+  les_model = None,       # None, Smagorinsky, Wale, DynamicLagrangian, ScaleDepDynamicLagrangian
+ 
   # LES model parameters
+  Smagorinsky = dict(Cs=0.1677),             # Standard Cs, same as OpenFOAM
   Wale = dict(Cw=0.325),
+  DynamicSmagorinsky = dict(Cs_comp_step=1), # Time step interval for Cs to be recomputed
+  KineticEnergySGS = dict(Ck=0.08, Ce=1.05),
 
   # Solver parameters that will be transferred to dolfins parameters['krylov_solver']
   krylov_solvers = dict(
@@ -65,7 +68,12 @@ NS_parameters.update(
   
   scalar_krylov_solver = dict(
     solver_type = 'bicgstab',
-    preconditioner_type = 'jacobi')
+    preconditioner_type = 'jacobi'),
+  
+  nut_krylov_solver = dict(
+    method = 'WeightedAverage', # Or 'default'
+    solver_type = 'cg',
+    preconditioner_type = 'jacobi'),
   
 )
   
