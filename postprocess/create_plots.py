@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from os import path, makedirs
 from compare import *
 from calculate_flux import *
-from validation_matrix import *
+#from validation_matrix import *
 
 def read_command_line():
     """Read arguments from commandline"""
@@ -58,10 +58,11 @@ def read_command_line():
 def makefolders(filepath):
     # Create new folders for the plots, use same "system" as Oasis
     if filepath is None:
-        filepath = path.join(path.dirname(__file__), "..", "nozzle_result", "Plots")
+        filepath = path.join(path.dirname(__file__), "..", "nozzle_results", "Plots")
 
         if not path.exists(filepath):
-            makedirs(path.join(filepath, "1"))
+            filepath = path.join(filepath, "1")
+            makedirs(filepath)
         else:
             folders = listdir(filepath)
             newfolder = array([int(folder) for folder in folders]).max() + 1
@@ -78,11 +79,10 @@ def main():
     data = get_variance(get_data())
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
-    filepath = make_plots(results, data, filepath)
+    make_plots(results, data, filepath)
     vizualize_flux(results, filepath)
-    compute_validation_matrix(results, filepath)
+    #compute_validation_matrix(results, filepath)
 
 
 if __name__ == "__main__":
     main()
-

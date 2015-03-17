@@ -44,13 +44,13 @@ else:
                          case=3500,
                          save_tstep=1000,
                          checkpoint=1000,
-                         check_steady=5,
-                         eval_t=50,
-                         plot_t=50,
+                         check_steady=1,
+                         eval_t=1,
+                         plot_t=1,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1M_refined_nozzle.xml",
-                         print_intermediate_info=1000,
+                         mesh_path="mesh/1_8M_refine_nozzle.xml",
+                         print_intermediate_info=100,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
                          use_krylov_solvers=True,
@@ -92,12 +92,11 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
 
     #plot(boundaries, interactive=True)
     #sys.exit(0)
-    #plot(boundaries, interactive=True)
 
     # Compute area of inlet and outlet and adjust radius
-    A_in = assemble(Constant(1)*ds(mesh)[boundaries](1))
-    A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
-    A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
+    A_walls = assemble(Constant(1)*ds(mesh)[boundaries](1))
+    A_in = assemble(Constant(1)*ds(mesh)[boundaries](2))
+    A_out = assemble(Constant(1)*ds(mesh)[boundaries](3))
 
     #print A_in, A_out, A_walls
     #sys.exit(0)
@@ -160,15 +159,16 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     key_ss = "slice_ss_%s"
 
     eps = 1e-8
+    n_slice = 200
     for i in range(len(z)):
         # Set up dict for the slices
         u_ = key_u % z[i]
         ss_ = key_ss % z[i]
-        eval_dict[u_]= {'points':0, 'array': zeros((200,3)), 'num': 0}
-        eval_dict[ss_] = {'points':0, 'array': zeros(200), 'num': 0}
+        eval_dict[u_]= {'points':0, 'array': zeros((n_slice ,3)), 'num': 0}
+        eval_dict[ss_] = {'points':0, 'array': zeros(n_slice), 'num': 0}
 
         # Create eval points
-        slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
+        slices_points = linspace(-radius[i]+eps, radius[i]-eps, n_slice)
         points = array([[x, 0, z[i]] for x in slices_points])
         points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
         eval_dict[u_]["points"] = points
@@ -199,26 +199,26 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
     # Create probes on senterline and wall
     eval_dict["senterline_u"] = {"points":eval_senter, 
-                                 "array": zeros((10000,3)),
+                                 "array": zeros((len(eval_senter),3)),
                                  "num": 0,
                                  "array_prev": 0,
                                  "num_prev": 1}
     eval_dict["senterline_p"] = {"points":eval_senter,
-                                 "array": zeros(10000),
+                                 "array": zeros(len(eval_senter)),
                                  "num": 0}
     eval_dict["senterline_ss"] = {"points":eval_senter,
-                                  "array": zeros(10000),
+                                  "array": zeros(len(eval_senter)),
                                   "num": 0}
     eval_dict["initial_u"] = {"points":eval_senter,
-                                 "array": zeros((10000,3)),
+                                 "array": zeros((len(eval_senter),3)),
                                  "num": 0,
                                  "array_prev": 0,
                                  "num_prev": 1}
     eval_dict["wall_p"] = {"points":eval_wall,
-                           "array": zeros(10000),
+                           "array": zeros(len(eval_wall)),
                            "num": 0}
     eval_dict["wall_ss"] = {"points":eval_wall,
-                            "array": zeros(10000),
+                            "array": zeros(len(eval_wall)),
                             "num": 0}
 
     if restart_folder is None:
@@ -335,7 +335,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.5:
+        if norm < 0.005:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
@@ -441,7 +441,7 @@ def evaluate_points(eval_dict, eval_map, u=None):
         for key, value in list(eval_dict.iteritems()):
             sample = eval_map[key.split("_")[1]]
             sample = sample if not type(sample) == type(lambda x: 1) else u
-            for i in range(len(eval_dict[key])):
+            for i in range(len(value["points"])):
                 try:
                     rank = MPI.rank(mpi_comm_world())
                     tmp = sample(value["points"][i])
@@ -450,9 +450,9 @@ def evaluate_points(eval_dict, eval_map, u=None):
                     rank = 0
                 rank = MPI.max(mpi_comm_world(), rank)
                 tmp = comm.bcast(tmp, root=rank)
-                eval_dict[key]["array"][i] += tmp
+                value["array"][i] += tmp
 
-            eval_dict[key]["num"] += 1
+            value["num"] += 1
 
 
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
