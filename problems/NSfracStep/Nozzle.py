@@ -38,19 +38,19 @@ else:
                     dict(mu=0.0035,
                          rho=1056.,
                          nu=0.0035 / 1056.,
-                         T=1000e10,
-                         dt=4.3E-6,
+                         T=1e10,
+                         dt=1e-4,
                          folder="nozzle_results",
                          case=3500,
                          save_tstep=1000,
                          checkpoint=1000,
-                         check_steady=1,
-                         eval_t=1,
-                         plot_t=1,
+                         check_steady=300,
+                         eval_t=50,
+                         plot_t=50,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1_8M_refine_nozzle.xml",
-                         print_intermediate_info=100,
+                         mesh_path="mesh/4M_boundary_refined_nozzle.xml",
+                         print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
                          use_krylov_solvers=True,
@@ -295,12 +295,13 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
-                  normal, domains, plot_t, checkpoint, **NS_namespace):
+                  normal, domains, plot_t, checkpoint, dt, **NS_namespace):
 
-    if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
-        evaluate_points(eval_dict, eval_map, u=u_)
-        if MPI.rank(mpi_comm_world()) == 0:
-            print tstep
+    #if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
+	#eval_map["u"].assign(project(u_, Vv))
+        #evaluate_points(eval_dict, eval_map, u=u_)
+        #if MPI.rank(mpi_comm_world()) == 0:
+        #    print tstep
 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Store vtk files for post prosess in paraview 
@@ -320,35 +321,35 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print inlet_flux, outlet_flux, walls_flux
 
         # Check the max norm of the difference
-        arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
-               eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["num_prev"]
-        norm = norm_l(arr, l="max")
+        #arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
+        #       eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["num_prev"]
+        #norm = norm_l(arr, l="max")
 
         # Update prev 
-        eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
-        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
+        #eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
+        #eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
 
         # Print info
         if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 0.5,
+        #    print "Condition:", norm < 0.0001,
             print "On timestep:", tstep,
-            print "Norm:", norm
+        #    print "Norm:", norm
 
         # Initial conditions is "washed away"
-        if norm < 0.005:
+        if tstep*dt > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
             eval_dict.pop("initial_u")
         
     if not eval_dict.has_key("initial_u"):
         # Evaluate points
+		ssv = eval_map["ss"](eval_map["u"])
         evaluate_points(eval_dict, eval_map, u=ssv)
         
         if tstep % plot_t == 0:
             # Project velocity, pressure and stress
             eval_map["u"].assign(project(u_, Vv))
             eval_map["p"].assign(project(p_, Pv))
-            ssv = eval_map["ss"](eval_map["u"])
             ssv.rename("stress", "shear stress in nozzle")
 
             # Compute scales for mesh evaluation
@@ -387,12 +388,12 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
  
             # Print info
             if MPI.rank(mpi_comm_world()) == 0:
-                print "Condition:", norm < 0.00001,
+                print "Condition:", norm < 0.000001,
                 print "On timestep:", tstep,
                 print "Norm:", norm
 
             # Check if stats have stabilized
-            if norm < 0.01:
+            if norm < 0.000001:
                 dump_stats(eval_dict, newfolder)
 
                 # Clean kill of program
