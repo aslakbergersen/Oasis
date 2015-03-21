@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
+nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -38,15 +38,15 @@ else:
                     dict(mu=0.0035,
                          rho=1056.,
                          nu=0.0035 / 1056.,
-                         T=1000e10,
-                         dt=4.3E-6,
-                         folder="nozzle_results",
+                         T=1e10,
+                         dt=8.7E-5,
+                         folder=nozzle_path,
                          case=3500,
                          save_tstep=1000,
                          checkpoint=1000,
-                         check_steady=5,
-                         eval_t=50,
-                         plot_t=50,
+                         check_steady=500,
+                         eval_t=100,
+                         plot_t=250,
                          velocity_degree=1,
                          pressure_degree=1,
                          mesh_path="mesh/1M_refined_nozzle.xml",
@@ -61,7 +61,7 @@ else:
 def mesh(mesh_path, **NS_namespace):
     return Mesh(mesh_path)
 
-# This is mesh dependent hmin() / 100 seems to be a good criteria
+
 eps_mesh = 1e-5
 def walls(x, on_boundary):
     return on_boundary \
@@ -78,9 +78,6 @@ def outlet(x, on_boundary):
 
 
 def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
-    # Expressions for boundary conditions
-    #2 * case * nu / r_0 * 1.11 #nu * case / r_0   # Need to find mesh inlet area
-    # Mark inlet and outlet
     boundaries = FacetFunction("size_t", mesh)
     boundaries.set_all(0)
     Inlet = AutoSubDomain(inlet)
@@ -92,15 +89,15 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
 
     #plot(boundaries, interactive=True)
     #sys.exit(0)
-    #plot(boundaries, interactive=True)
 
     # Compute area of inlet and outlet and adjust radius
-    A_in = assemble(Constant(1)*ds(mesh)[boundaries](1))
-    A_out = assemble(Constant(1)*ds(mesh)[boundaries](2))
-    A_walls = assemble(Constant(1)*ds(mesh)[boundaries](3))
+    A_walls = assemble(Constant(1)*ds(mesh)[boundaries](1))
+    A_in = assemble(Constant(1)*ds(mesh)[boundaries](2))
+    A_out = assemble(Constant(1)*ds(mesh)[boundaries](3))
 
     #print A_in, A_out, A_walls
     #sys.exit(0)
+
     r_0 = sqrt(A_in / pi)
 
     # Find u_0 for 
@@ -282,23 +279,23 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     Outlet.mark(domains, 2)
     Walls.mark(domains, 3)
 
+    h = CellVolume(mesh)
+    dl =  project(12/math.sqrt(2) * h**(1./3), DG)
+
+    l_pluss = Function(DG)
+    t_pluss = Function(DG)
+
     return dict(Vv=Vv, Pv=Pv, eval_map=eval_map, DG=DG, z=z, files=files,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal,
-                domains=domains)
+                domains=domains, dl=dl, l_pluss=l_pluss, t_pluss=t_pluss)
     
-
-#def start_timestep_hook(u_, Vv, newfolder, eval_map, **NS_namespace):
-#    eval_map["u"].assign(project(u_, Vv))
-#    file = File(newfolder + "/VTK/t0.pvd")
-#    file << eval_map["u"] 
-
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, eval_map, nu, z, mu, DG, eval_t, files, T, folder, 
-                  normal, domains, plot_t, checkpoint, **NS_namespace):
+                  normal, domains, plot_t, checkpoint, dl, t_pluss, l_pluss, **NS_namespace):
 
-    if tstep % eval_t == 0 and eval_dict.has_key("initial_u"):
-        evaluate_points(eval_dict, eval_map, u=u_)
+    # TODO: Find a new variable to desisde time reports
+    if tstep % eval_t == 0:
         if MPI.rank(mpi_comm_world()) == 0:
             print tstep
 
@@ -308,69 +305,47 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
         file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
         file << eval_map["u"]
 
-        # Evaluate points
-        if tstep % eval_t != 0:
-            evaluate_points(eval_dict, eval_map, u=u_)
-
         inlet_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](1))
         outlet_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](2))
         walls_flux = assemble(dot(eval_map["u"], normal)*ds(mesh)[domains](3))
 
         if MPI.rank(mpi_comm_world()) == 0:
-            print inlet_flux, outlet_flux, walls_flux
-
-        # Check the max norm of the difference
-        arr = eval_dict["initial_u"]["array"] / eval_dict["initial_u"]["num"] - \
-               eval_dict["initial_u"]["array_prev"] / eval_dict["initial_u"]["num_prev"]
-        norm = norm_l(arr, l="max")
-
-        # Update prev 
-        eval_dict["initial_u"]["array_prev"] = eval_dict["initial_u"]["array"].copy()
-        eval_dict["initial_u"]["num_prev"] = eval_dict["initial_u"]["num"]
-
-        # Print info
-        if MPI.rank(mpi_comm_world()) == 0:
-            print "Condition:", norm < 0.5,
-            print "On timestep:", tstep,
-            print "Norm:", norm
+            print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
 
         # Initial conditions is "washed away"
-        if norm < 0.5:
+        if dt*tstep > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
-                print "="*25 + "\n DONE WITH FIRST ROUND\n" + "="*25
+                print "="*25 + "\n DONE WITH FIRST ROUND\n\t%s\n" % tstep + "="*25
             eval_dict.pop("initial_u")
         
     if not eval_dict.has_key("initial_u"):
         # Evaluate points
+	ssv = eval_map["ss"](eval_map["u"])
         evaluate_points(eval_dict, eval_map, u=ssv)
         
         if tstep % plot_t == 0:
             # Project velocity, pressure and stress
             eval_map["u"].assign(project(u_, Vv))
             eval_map["p"].assign(project(p_, Pv))
-            ssv = eval_map["ss"](eval_map["u"])
             ssv.rename("stress", "shear stress in nozzle")
 
             # Compute scales for mesh evaluation
-            nu = Constant(nu)
-            mu = Constant(mu)
+            u_star = ssv.vector().array() / 2*sqrt(mu*rho)
 
-            epsilon = project(ssv / (2*mu) * sqrt(nu*2), DG)
+            l_pluss.set_local(np.sqrt(u_star) * dl.vector().array() / nu)
+            l_pluss.apply("insert")
 
-            time_scale = project(sqrt(sqrt(nu) * epsilon), DG)
-            length_scale = project(sqrt(sqrt(nu**3) / epsilon), DG)
-            velocity_scale = project(sqrt(nu) / epsilon, DG)
+            t_pluss.set_local(nu / u_star)
+            t_pluss.apply("insert")
 
-            time_scale.rename("t", "time scale")
-            length_scale.rename("l", "length scale")
-            velocity_scale.rename("v", "velocity scale")
+            l_pluss.rename("l+", "length scale")
+            t_pluss.rename("t+", "time scale")
 
             # Store vtk files for post prosess in paraview 
             t_ = T * tstep
             files["u"] << eval_map["u"], t_
-            files["l"] << length_scale, t_
-            files["t"] << time_scale, t_
-            files["v"] << velocity_scale, t_
+            files["l"] << l_pluss, t_
+            files["t"] << t_pluss, t_
        
         if tstep % check_steady == 0:
             # Check the max norm of the difference
@@ -392,7 +367,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
                 print "Norm:", norm
 
             # Check if stats have stabilized
-            if norm < 0.01:
+            if norm < 0.00001:
                 dump_stats(eval_dict, newfolder)
 
                 # Clean kill of program
@@ -458,7 +433,7 @@ def evaluate_points(eval_dict, eval_map, u=None):
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
                  inlet_string, num_cell, folder, mesh_path):
     file = open(path.join(folder, "problem_paramters.txt"), "w")
-    file.write("=== Nozzle with sudden expanssioni ===\n")
+    file.write("=== Nozzle with sudden expanssion ===\n")
     file.write("dt=%e\n" % dt)
     file.write("hmin=%e\n" % hmin)
     file.write("hmax=%s\n" % hmax)
