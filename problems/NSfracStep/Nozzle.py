@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
 restart_folder = None #"nozzle_results/data/3/Checkpoint"
 machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
+#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 if restart_folder is not None:
@@ -39,8 +39,8 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1e10,
-                         dt=8.7E-5,
-                         folder=nozzle_path,
+                         dt=1e-4,
+                         folder="nozzle_results",
                          case=3500,
                          save_tstep=1000,
                          checkpoint=1000,
@@ -49,7 +49,7 @@ else:
                          plot_t=250,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1M_refined_nozzle.xml",
+                         mesh_path="mesh/4M_boundary_refined_nozzle.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -61,7 +61,7 @@ else:
 def mesh(mesh_path, **NS_namespace):
     return Mesh(mesh_path)
 
-
+# This is mesh dependent hmin() / 100 seems to be a good criteria
 eps_mesh = 1e-5
 def walls(x, on_boundary):
     return on_boundary \
@@ -157,15 +157,16 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     key_ss = "slice_ss_%s"
 
     eps = 1e-8
+    n_slice = 200
     for i in range(len(z)):
         # Set up dict for the slices
         u_ = key_u % z[i]
         ss_ = key_ss % z[i]
-        eval_dict[u_]= {'points':0, 'array': zeros((200,3)), 'num': 0}
-        eval_dict[ss_] = {'points':0, 'array': zeros(200), 'num': 0}
+        eval_dict[u_]= {'points':0, 'array': zeros((n_slice ,3)), 'num': 0}
+        eval_dict[ss_] = {'points':0, 'array': zeros(n_slice), 'num': 0}
 
         # Create eval points
-        slices_points = linspace(-radius[i]+eps, radius[i]-eps, 200)
+        slices_points = linspace(-radius[i]+eps, radius[i]-eps, n_slice)
         points = array([[x, 0, z[i]] for x in slices_points])
         points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
         eval_dict[u_]["points"] = points
@@ -196,26 +197,26 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
     # Create probes on senterline and wall
     eval_dict["senterline_u"] = {"points":eval_senter, 
-                                 "array": zeros((10000,3)),
+                                 "array": zeros((len(eval_senter),3)),
                                  "num": 0,
                                  "array_prev": 0,
                                  "num_prev": 1}
     eval_dict["senterline_p"] = {"points":eval_senter,
-                                 "array": zeros(10000),
+                                 "array": zeros(len(eval_senter)),
                                  "num": 0}
     eval_dict["senterline_ss"] = {"points":eval_senter,
-                                  "array": zeros(10000),
+                                  "array": zeros(len(eval_senter)),
                                   "num": 0}
     eval_dict["initial_u"] = {"points":eval_senter,
-                                 "array": zeros((10000,3)),
+                                 "array": zeros((len(eval_senter),3)),
                                  "num": 0,
                                  "array_prev": 0,
                                  "num_prev": 1}
     eval_dict["wall_p"] = {"points":eval_wall,
-                           "array": zeros(10000),
+                           "array": zeros(len(eval_wall)),
                            "num": 0}
     eval_dict["wall_ss"] = {"points":eval_wall,
-                            "array": zeros(10000),
+                            "array": zeros(len(eval_wall)),
                             "num": 0}
 
     if restart_folder is None:
@@ -313,7 +314,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
 
         # Initial conditions is "washed away"
-        if dt*tstep > 0.2:
+        if tstep*dt > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n\t%s\n" % tstep + "="*25
             eval_dict.pop("initial_u")
@@ -416,7 +417,7 @@ def evaluate_points(eval_dict, eval_map, u=None):
         for key, value in list(eval_dict.iteritems()):
             sample = eval_map[key.split("_")[1]]
             sample = sample if not type(sample) == type(lambda x: 1) else u
-            for i in range(len(eval_dict[key])):
+            for i in range(len(value["points"])):
                 try:
                     rank = MPI.rank(mpi_comm_world())
                     tmp = sample(value["points"][i])
@@ -425,9 +426,9 @@ def evaluate_points(eval_dict, eval_map, u=None):
                     rank = 0
                 rank = MPI.max(mpi_comm_world(), rank)
                 tmp = comm.bcast(tmp, root=rank)
-                eval_dict[key]["array"][i] += tmp
+                value["array"][i] += tmp
 
-            eval_dict[key]["num"] += 1
+            value["num"] += 1
 
 
 def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,

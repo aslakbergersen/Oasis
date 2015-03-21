@@ -1,7 +1,7 @@
 #map = get_data()
 #data = get_variance(map)
 
-def compute_validation_matrix(results, data, filepath)
+def compute_validation_matrix(results, data, filepath):
     error = 0
     eval = 0
     tol = 1e-5
@@ -34,7 +34,6 @@ def compute_validation_matrix(results, data, filepath)
 
             eval += len(u[-1])
 
-error_omega = error_omega / eval
-error_epsilon = error_epsilon / eval
-
-print "Omega:", error_omega, "Epsilon", error_epsilon
+#error_omega = error_omega / eval
+#error_epsilon = error_epsilon / eval
+#print "Omega:", error_omega, "Epsilon", error_epsilon
