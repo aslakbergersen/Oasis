@@ -158,14 +158,15 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         ss_ = key_ss % z[i]
         slices_points = linspace(-radius[i]+eps, radius[i]-eps, n_slice)
         points = array([[x, 0, z[i]] for x in slices_points])
-        eval_dict[u_] = StatisticsProbes(points.flatten(), Pv) 
-        eval_dict[ss_] = StatisticsProbes(points.flatten(), Pv)
+        eval_dict[u_] = StatisticsProbes(points.flatten(), Pv, True) 
+        eval_dict[ss_] = StatisticsProbes(points.flatten(), Pv, True)
 
         # Store points
         points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
 
     # Setup probes in the centerline and at the wall
-    z_senterline = linspace(start+eps, stop-eps, 10000)
+    N = 10000
+    z_senterline = linspace(start+eps, stop-eps, N)
     eval_senter = array([[0.0, 0.0, i] for i in z_senterline])
     eval_senter.dump(path.join(newfolder, "Stats", "Points", "senterline"))
     eval_wall = []
@@ -187,12 +188,12 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     eval_wall = array(eval_wall)
     eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall"))
 
-    eval_dict["senterline_u"] = StatisticsProbes(eval_senter.flatten(), Pv)
-    eval_dict["senterline_p"] = StatisticsProbes(eval_senter.flatten(), Pv)
-    eval_dict["senterline_ss"] = StatisticsProbes(eval_senter.flatten(), Pv)
-    eval_dict["initial_u"] = StatisticsProbes(eval_senter.flatten(), Pv)
-    eval_dict["wall_p"] = StatisticsProbes(eval_wall.flatten(), Pv)
-    eval_dict["wall_ss"] = StatisticsProbes(eval_wall.flatten(), Pv)
+    eval_dict["senterline_u"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
+    eval_dict["senterline_p"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
+    eval_dict["senterline_ss"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
+    eval_dict["initial_u"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
+    eval_dict["wall_p"] = StatisticsProbes(eval_wall.flatten(), Pv, True)
+    eval_dict["wall_ss"] = StatisticsProbes(eval_wall.flatten(), Pv, True)
 
     if restart_folder is None:
         # Print header
@@ -266,7 +267,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     Walls.mark(domains, 3)
 
     # For stopping criteria
-    prev = zeros((n_slice, 3))
+    prev = [zeros((N, 3))]
 
     return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, stress=stress, prev=prev,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal, domains=domains, 
@@ -341,7 +342,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             norm = norm_l(arr, l="max")
 		
             # Update prev 
-            prev[0] = (eval_dict["senterline_"].array() / num).copy()
+            prev[0] = (eval_dict["senterline_u"].array() / num).copy()
 
             # Print info
             if MPI.rank(mpi_comm_world()) == 0:
