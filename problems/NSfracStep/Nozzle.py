@@ -21,7 +21,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None #"nozzle_results/data/73/Checkpoint"
+restart_folder = "nozzle_results/data/121/Checkpoint"
 #machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
 #nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
@@ -206,8 +206,8 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     else:
         # Restart stats
         files = listdir(path.join(newfolder, "Stats"))
-        eval = files[0].split("_")[-1]
-        if files != []:
+        eval = int(files[0].split("_")[-1])
+        if files != [] and eval > 0:
             for file in files:
                 if file == "Points" or file == "initial_u_%s" % eval: 
                     continue
