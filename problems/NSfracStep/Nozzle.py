@@ -47,7 +47,7 @@ else:
                          checkpoint=1,
                          check_steady=1,
                          eval_t=1,
-                         plot_t=5,
+                         plot_t=1,
                          velocity_degree=1,
                          pressure_degree=1,
                          mesh_path="mesh/2M_boundary_refined_nozzle_constant_inlet.xml",
@@ -288,8 +288,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Store vtk files for post prosess in paraview 
         [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
-        file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
-        file << uv
+        files["u"] << uv
 
         inlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](1))
         outlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](2))
@@ -325,7 +324,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             t_pluss.rename("t+", "time scale")
             ssv.rename("Shear stress", "Shear stress")
             uv.rename("u", "velocity")
-            p_.rename("p", "preasurre")
+            p_.rename("p", "pressure")
 
             # Store vtk files for post process in paraview 
             t_ = T * tstep
@@ -333,7 +332,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             files["l"] << l_pluss, t_
             files["t"] << t_pluss, t_
             files["p"] << p_, t_
-            files["ssv"] << ssv, t_
+            files["ss"] << ssv, t_
 
         if tstep % check_steady == 0:
             # Check the max norm of the difference
