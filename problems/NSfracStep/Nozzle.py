@@ -43,11 +43,11 @@ else:
                          dt=1.5E-5,
                          folder="nozzle_results",
                          case=3500,
-                         save_tstep=1000,
-                         checkpoint=1000,
-                         check_steady=5,
-                         eval_t=100,
-                         plot_t=500,
+                         save_tstep=1,
+                         checkpoint=1,
+                         check_steady=1,
+                         eval_t=1,
+                         plot_t=5,
                          velocity_degree=1,
                          pressure_degree=1,
                          mesh_path="mesh/2M_boundary_refined_nozzle_constant_inlet.xml",
@@ -128,6 +128,8 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                        constrained_domain=constrained_domain)
     DG = FunctionSpace(mesh, 'DG', 0)
 
+    uv = Function(Vv)
+
     r_2 = 0.008/0.022685 * r_0
     r_1 = r_0 / 3.
 
@@ -145,7 +147,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
         else:
             radius.append(r_0)
 
-    # Container for all evaluations points
+    # Container for all StatisticsProbes
     eval_dict = {}
     key_u = "slice_u_%s"
     key_ss = "slice_ss_%s"
@@ -198,8 +200,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     if restart_folder is None:
         # Print header
         if MPI.rank(mpi_comm_world()) == 0:
-            u_0 = 2*flow_rate[case] / (r_0*r_0*math.pi)
-            print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop, u_0,
+            print_header(dt, mesh.hmax(), mesh.hmin(), case, start, stop,
                          inlet_string, mesh.num_cells(), newfolder, mesh_path)
 
     else:
@@ -271,13 +272,13 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
     return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, stress=stress, prev=prev,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal, domains=domains, 
-                dl=dl, l_pluss=l_pluss, t_pluss=t_pluss)
+                dl=dl, l_pluss=l_pluss, t_pluss=t_pluss, uv=uv)
     
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, nu, z, rho, DG, eval_t, files, T, folder, stress, prev,
                   normal, dt, domains, plot_t, checkpoint, dl, t_pluss, l_pluss,
-                  **NS_namespace):
+                  uv, **NS_namespace):
 
     # Print timestep
     if tstep % eval_t == 0:
@@ -286,13 +287,13 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
 
     if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
         # Store vtk files for post prosess in paraview 
-        u = project(u_, Vv)
+        [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
         file = File(newfolder + "/VTK/nozzle_velocity_%06d.pvd" % (tstep))
-        file << u
+        file << uv
 
-        inlet_flux = assemble(dot(u, normal)*ds(mesh)[domains](1))
-        outlet_flux = assemble(dot(u, normal)*ds(mesh)[domains](2))
-        walls_flux = assemble(dot(u, normal)*ds(mesh)[domains](3))
+        inlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](1))
+        outlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](2))
+        walls_flux = assemble(dot(uv, normal)*ds(mesh)[domains](3))
 
         if MPI.rank(mpi_comm_world()) == 0:
             print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
@@ -310,7 +311,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
 
         if tstep % plot_t == 0:
             # Compute scales for mesh evaluation
-            uv = project(u_, Vv)
+            [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
 
             u_star = ssv.vector().array() / (2 * rho)
 
@@ -323,26 +324,28 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             l_pluss.rename("l+", "length scale")
             t_pluss.rename("t+", "time scale")
             ssv.rename("Shear stress", "Shear stress")
-            u.rename("u", "velocity")
-            p.rename("p", "preasurre")
+            uv.rename("u", "velocity")
+            p_.rename("p", "preasurre")
 
             # Store vtk files for post process in paraview 
             t_ = T * tstep
-            files["u"] << u, t_
+            files["u"] << uv, t_
             files["l"] << l_pluss, t_
             files["t"] << t_pluss, t_
-            files["p"] << p, t_
+            files["p"] << p_, t_
             files["ssv"] << ssv, t_
 
         if tstep % check_steady == 0:
             # Check the max norm of the difference
             num = eval_dict["senterline_u"].number_of_evaluations()
-            arr = eval_dict["senterline_u"].array()[:,:3] / num - prev[0]
+            arr = eval_dict["senterline_u"].array()
+            arr = comm.bcast(arr, root=0)  # Might be better to do bcast after norm_l
+            arr = arr[:,:3] / num - prev[0]
 
             norm = norm_l(arr, l="max")
 		
             # Update prev 
-            prev[0] = (eval_dict["senterline_u"].array() / num).copy()
+            prev[0] = (arr[:,:3] / num).copy()
 
             # Print info
             if MPI.rank(mpi_comm_world()) == 0:
@@ -378,7 +381,9 @@ def dump_stats(eval_dict, newfolder):
 
     # Dump stats, store number of evaluations in filename
     for key, value in eval_dict.iteritems():
-        value["array"].dump(path.join(filepath, key + "_" + str(value["num"])))
+        arr = value.array()
+        if MPI.rank(mpi_comm_world()) == 0:
+            arr.dump(path.join(filepath, key + "_" + str(value.number_of_evaluations())))
 
 
 def evaluate_points(eval_dict, eval_map):
@@ -392,8 +397,8 @@ def evaluate_points(eval_dict, eval_map):
             value(sample)
 
 
-def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
-                 inlet_string, num_cell, folder, mesh_path):
+def print_header(dt, hmin, hmax, Re, start, stopp, inlet_string, 
+                 num_cell, folder, mesh_path):
     file = open(path.join(folder, "problem_paramters.txt"), "w")
     file.write("=== Nozzle with sudden expanssion ===\n")
     file.write("dt=%e\n" % dt)
@@ -403,7 +408,6 @@ def print_header(dt, hmin, hmax, Re, start, stopp, inlet_velocity,
     file.write("Start=%s\n" % start)
     file.write("Stopp=%s\n" % stopp)
     file.write("Inlet=%s\n" % inlet_string)
-    file.write("u_0=%s\n" % inlet_velocity)
     file.write("Number of cells=%s\n" % num_cell)
     file.write("Path to mesh=%s\n" % mesh_path)
     file.close()
