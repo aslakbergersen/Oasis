@@ -43,11 +43,11 @@ else:
                          dt=1.5E-5,
                          folder="nozzle_results",
                          case=3500,
-                         save_tstep=1,
-                         checkpoint=1,
-                         check_steady=1,
-                         eval_t=1,
-                         plot_t=1,
+                         save_tstep=1000,
+                         checkpoint=1000,
+                         check_steady=300,
+                         eval_t=100,
+                         plot_t=500,
                          velocity_degree=1,
                          pressure_degree=1,
                          mesh_path="mesh/2M_boundary_refined_nozzle_constant_inlet.xml",
@@ -298,7 +298,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
 
         # Initial conditions is "washed away"
-        if tstep*dt > 1e-7:
+        if tstep*dt > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n\t%s\n" % tstep + "="*25
             eval_dict.pop("initial_u")
