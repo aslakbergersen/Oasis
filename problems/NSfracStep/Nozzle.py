@@ -4,6 +4,7 @@ from os import path, getcwd, listdir, remove, system
 from numpy import array, linspace
 import sys
 import numpy as np
+import math
 import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
 import subprocess
@@ -49,7 +50,7 @@ else:
                          plot_t=250,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/4M_boundary_refined_nozzle.xml",
+                         mesh_path="mesh/9M_boundary_refined_nozzle.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
