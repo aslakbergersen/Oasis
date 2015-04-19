@@ -10,8 +10,9 @@ from ..DrivenCavity import *
 NS_parameters.update(
     nu = 0.001,
     T  = 1.0,
-    dt = 0.001,
+    dt = 0.00001,
     plot_interval = 20,
+    checkpoint=2,
     print_intermediate_info = 100,
     use_krylov_solvers = True)
 

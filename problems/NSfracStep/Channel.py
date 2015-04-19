@@ -10,7 +10,7 @@ from os import getcwd
 import cPickle
 import random
 
-#restart_folder = 'channel_results/data/21/Checkpoint'
+restart_folder = 'channel_results/data/2/Checkpoint'
 restart_folder = None
 
 class ChannelGrid(StructuredGrid):
@@ -54,7 +54,7 @@ else:
         update_statistics = 10,
         save_statistics = 100,
         check_flux = 10,
-        checkpoint = 100,
+        checkpoint = 10,
         save_step = 100,
         nu = nu,
         Re_tau = Re_tau,

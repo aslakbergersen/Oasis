@@ -114,7 +114,6 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
             f = open(path.join(timefolder, 'params.dat'), 'w')
             #print NS_parameters
             if NS_parameters.has_key("source_term"):
-                NS_parameters.pop("mesh")
                 NS_parameters.pop("u_e")
                 NS_parameters.pop("p_e")
                 NS_parameters.pop("source_term")
