@@ -3,6 +3,7 @@ from os import path, makedirs
 from compare import *
 from calculate_flux import *
 #from validation_matrix import *
+from fancy_plot import *
 
 def read_command_line():
     """Read arguments from commandline"""
@@ -25,9 +26,11 @@ def read_command_line():
     # Check if the choises are legal
     folder_path = path.join(path.dirname(__file__), "..", "nozzle_results", "data")
     if args.f is not None:
-        if not path.isfolder(path.join(folder_path, args.f)): 
+        if not path.isdir(path.join(folder_path, str(args.f))): 
             print "The run: %s does not exist." % args.f
             exit(1)
+        else:
+            args.l = False
 
     if args.c is not None:
         if isinstance(args.c, list):
@@ -79,8 +82,9 @@ def main():
     data = get_variance(get_data())
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
-    make_plots(results, data, filepath)
-    vizualize_flux(results, filepath)
+    fancy_plot(results, data, filepath)
+    #make_plots(results, data, filepath)
+    #vizualize_flux(results, filepath)
     #compute_validation_matrix(results, filepath)
 
 

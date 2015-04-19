@@ -133,18 +133,19 @@ def get_data_results(folder_path):
     data = {"array": {}, "points": {}, "num": 0, "num_initial": 0}
     
     # Get number of evaluations
+    data["num"] = 0
     for file in listdir(stat_path):
         if path.isfile(path.join(stat_path, file)):
-            if "senterline_u" in file:
+            if "senterline_u" in file and int(file.split("_")[-1]) > data["num"]:
+                print "New num:", int(file.split("_")[-1]) 
                 data["num"] = int(file.split("_")[-1])
-            elif "initial_u" in file:
-                data["num_initial"] = int(file.split("_")[-1])
 
     # Get data
+    print data["num"]
     for file in listdir(stat_path):
         if path.isfile(path.join(stat_path, file)):
             key = "_".join(file.split("_")[:-1])
-            num_ = data["num"] if "initial_u" not in file else data["num_initial"]
+            num_ = data["num"]
             arr = np.load(path.join(stat_path, file)) / num_
             data["array"][key] = arr
 
@@ -189,7 +190,7 @@ def map_filenames(nozzle_header):
     elif "axial" in nozzle_header:
         element = 2
     
-    nozzle_header = nozzle_header.replace("plot-profile-radial-velocity-at-z", "slice_u_")
+    nozzle_header = nozzle_header.replace("plot-profile-radial-velocity-at-z","slice_u_r")
     nozzle_header = nozzle_header.replace("plot-profile-shear-stress-at-z", "slice_ss_")
     nozzle_header = nozzle_header.replace("plot-wall-distribution-pressure", "wall_p")
     nozzle_header = nozzle_header.replace("plot-profile-axial-velocity-at-z", "slice_u_")
@@ -208,7 +209,7 @@ def make_plots(results, data, filepath):
     """Match experimental data against numerical"""
     for key in data.keys():
         key_re, element = map_filenames(key)
-        if key_re is not None:
+        if key_re is not None and "slice_u_r" not in key_re:
             plt.figure()
             plt.title(key)
             u = data[key]
