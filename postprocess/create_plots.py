@@ -83,8 +83,8 @@ def main():
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
     fancy_plot(results, data, filepath)
-    #make_plots(results, data, filepath)
-    #vizualize_flux(results, filepath)
+    make_plots(results, data, filepath)
+    vizualize_flux(results, filepath)
     #compute_validation_matrix(results, filepath)
 
 
