@@ -21,7 +21,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = "nozzle_results/data/121/Checkpoint"
+restart_folder = "nozzle_results/data/126/Checkpoint"
 #machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
 #nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
@@ -40,7 +40,7 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1e10,
-                         dt=1.5E-5,
+                         dt=9.6E-6,
                          folder="nozzle_results",
                          case=3500,
                          save_tstep=1000,
@@ -50,7 +50,7 @@ else:
                          plot_t=500,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/2M_boundary_refined_nozzle_constant_inlet.xml",
+                         mesh_path="mesh/12M_boundary_refined_nozzle_constant_inlet.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -339,9 +339,9 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             num = eval_dict["senterline_u"].number_of_evaluations()
             arr = eval_dict["senterline_u"].array()
             arr = comm.bcast(arr, root=0)  # Might be better to do bcast after norm_l
-            arr = arr[:,:3] / num - prev[0]
+            arr_ = arr[:,:3] / num - prev[0]
 
-            norm = norm_l(arr, l="max")
+            norm = norm_l(arr_, l="max")
 		
             # Update prev 
             prev[0] = (arr[:,:3] / num).copy()
