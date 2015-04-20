@@ -146,7 +146,7 @@ def get_data_results(folder_path):
         if path.isfile(path.join(stat_path, file)):
             key = "_".join(file.split("_")[:-1])
             num_ = data["num"]
-            arr = np.load(path.join(stat_path, file)) / num_
+            arr = np.load(path.join(stat_path, file)) #/ num_
             data["array"][key] = arr
 
     # Get eval points
