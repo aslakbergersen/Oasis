@@ -52,5 +52,5 @@ def fancy_plot(results, data, filepath):
             first = False
 
     legend()
-    show()
-    #savefig(path.join(filepath, "fancy_plot.png"))
+    #show()
+    savefig(path.join(filepath, "fancy_plot.png"))
