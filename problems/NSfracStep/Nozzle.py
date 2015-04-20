@@ -22,8 +22,8 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = None #"nozzle_results/data/3/Checkpoint"
-machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
+restart_folder = "nozzle_results/data/127/Checkpoint"
+#machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
 #nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
@@ -41,7 +41,7 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1e10,
-                         dt=9.6E-6,
+                         dt=2E-5,
                          folder="nozzle_results",
                          case=3500,
                          save_tstep=1000,
@@ -51,7 +51,7 @@ else:
                          plot_t=500,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/12M_boundary_refined_nozzle_constant_inlet.xml",
+                         mesh_path="mesh/3M_boundary_refined_nozzle_constant_inlet.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -383,6 +383,7 @@ def dump_stats(eval_dict, newfolder):
     for key, value in eval_dict.iteritems():
         arr = value.array()
         if MPI.rank(mpi_comm_world()) == 0:
+            arr = arr / value.number_of_evaluations()
             arr.dump(path.join(filepath, key + "_" + str(value.number_of_evaluations())))
 
 
