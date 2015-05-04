@@ -3,7 +3,14 @@ from compare import *
 from numpy import array
 from os import path
 
-def fancy_plot(results, data, filepath):
+def fancy_plot(results, data, filepath, leg):
+    #print results.keys()
+    if 0 in results.keys():
+        comp_list = results.keys()
+    else:
+        comp_list = [0]
+        results = {0: results}
+
     x = [-1, 0, 2, 4, 6, 8, 15, 20]
     edge = array([-0.002, -0.002, -0.006, -0.006])
     edge_x = [-4, 0, 1e-10, 21]
@@ -25,6 +32,8 @@ def fancy_plot(results, data, filepath):
     ylabel("r [m]")
     #p.set_xticks([-1, 0, 2, 8, 15, 20])
     
+    color = ["r", "g", "y", "k"]
+
     # Plot experimental data
     for key in data.keys():
         key_re, element = map_filenames(key)
@@ -36,18 +45,21 @@ def fancy_plot(results, data, filepath):
 
             if first:
                 errorbar(x, u_, xerr=[array(u[1])/scale, array(u[2])/scale], 
-                         fmt="o", label="Data", color="b")
+                        fmt="o", label="Data", color="b")
             else:
                 errorbar(x, u_, xerr=[array(u[1])/scale, array(u[2])/scale],
-                                      fmt="o", color="b")
+                                    fmt="o", color="b")
+            for k in comp_list: 
+                x = results[k]["array"][key_re][:,2] / scale + displacement
+                u = results[k]["points"]["_".join(key_re.split("_")[::2])][:,0]
 
-            x = results["array"][key_re][:,2] / scale + displacement
-            u = results["points"]["_".join(key_re.split("_")[::2])][:,0]
-
-            if first:
-                tmp, = plot(x, u, color="r", label="CFD")
-            else:
-                tmp, = plot(x, u, color="r")
+                if first:
+                    if leg is not None:
+                        tmp, = plot(x, u, color=color[k], label=leg[k])
+                    else:
+                        tmp, = plot(x, u, color=color[k], label="CFD")
+                else:
+                    tmp, = plot(x, u, color=color[k])
 
             first = False
 
