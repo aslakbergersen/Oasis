@@ -41,11 +41,13 @@ def compute_validation_matrix(results, data, filepath, legend):
                             u_this = U[j]*vekt_left + vekt_right*U[j+1]
                             break
 
-                    if u_piv[counter] > 1e-5:
+                    if abs(u_piv[counter]) > 0.01:
                         error_list[k] += abs((u_piv[counter] - u_this) / u_piv[counter])
                         counter += 1
+                    else:
+                        print "Utelukket", legend[k]
 
-                eval_list[k] += counter - 1
+                eval_list[k] += counter
 
 
     if legend is None and len(comp_list) == 1:
