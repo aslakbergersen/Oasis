@@ -44,8 +44,6 @@ def compute_validation_matrix(results, data, filepath, legend):
                     if abs(u_piv[counter]) > 0.01:
                         error_list[k] += abs((u_piv[counter] - u_this) / u_piv[counter])
                         counter += 1
-                    else:
-                        print "Utelukket", legend[k]
 
                 eval_list[k] += counter
 

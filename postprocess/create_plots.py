@@ -93,10 +93,10 @@ def main():
     data = get_variance(get_data())
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
-    #fancy_plot(results, data, filepath, legend)
-    #make_plots(results, data, filepath, legend)
-    #if compare is None:
-    #    vizualize_flux(results, filepath)
+    fancy_plot(results, data, filepath, legend)
+    make_plots(results, data, filepath, legend)
+    if compare is None:
+        vizualize_flux(results, filepath)
     compute_validation_matrix(results, data, filepath, legend)
 
 

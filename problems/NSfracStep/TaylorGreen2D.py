@@ -18,7 +18,7 @@ NS_parameters.update(
     print_intermediate_info = 1000,
     compute_error = 1,
     use_krylov_solvers = False,
-    velocity_degree = 1,
+    velocity_degree = 2,
     pressure_degree = 1,
     krylov_report = False
 )
