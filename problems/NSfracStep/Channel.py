@@ -6,11 +6,11 @@ __license__  = "GNU Lesser GPL version 3 or any later version"
 from ..NSfracStep import *
 from fenicstools import StructuredGrid, Probes
 from numpy import arctan, array, cos, pi
-from os import getcwd
+from os import getcwd, makedirs
 import cPickle
 import random
 
-restart_folder = 'channel_results/data/2/Checkpoint'
+#restart_folder = 'channel_results/data/21/Checkpoint'
 restart_folder = None
 
 class ChannelGrid(StructuredGrid):
@@ -32,7 +32,8 @@ if restart_folder:
     restart_folder = path.join(getcwd(), restart_folder)
     f = open(path.join(restart_folder, 'params.dat'), 'r')
     NS_parameters.update(cPickle.load(f))
-    NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt'] 
+    #NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt'] 
+    NS_parameters['T'] = 10
     NS_parameters['restart_folder'] = restart_folder
     globals().update(NS_parameters)
     
@@ -46,7 +47,7 @@ else:
     NS_parameters.update(Lx=Lx, Ly=Ly, Lz=Lz, Nx=Nx, Ny=Ny, Nz=Nz)
     
     # Override some problem specific parameters
-    T = 100.
+    T = 1.
     dt = 0.2
     nu = 2.e-5
     Re_tau = 178.12
@@ -54,7 +55,7 @@ else:
         update_statistics = 10,
         save_statistics = 100,
         check_flux = 10,
-        checkpoint = 10,
+        checkpoint = 100,
         save_step = 100,
         nu = nu,
         Re_tau = Re_tau,
@@ -97,10 +98,13 @@ utau = nu * Re_tau
 def body_force(**NS_namespace):
     return Constant((utau**2, 0., 0.))
 
-def pre_solve_hook(V, q_, q_1, q_2, u_components, mesh, **NS_namespace):    
+def pre_solve_hook(V, u_, mesh, AssignedVectorFunction, newfolder, MPI, 
+                   mpi_comm_world, **NS_namespace):    
     """Called prior to time loop"""
-    Vv = VectorFunctionSpace(V.mesh(), 'CG', 1, constrained_domain=constrained_domain)
-    uv = Function(Vv) 
+    if MPI.rank(mpi_comm_world()) == 0:
+        makedirs(path.join(newfolder, "Stats"))
+        
+    uv = AssignedVectorFunction(u_) 
     tol = 5e-8
     
     # It's periodic so don't pick the same location twice for sampling statistics:
