@@ -10,16 +10,16 @@ NS_parameters.update(
     nu = 0.01,
     T = 1.,
     dt = 0.001,
-    Nx = 20, Ny = 20,
+    N = 20,# Ny = 20,
     folder = "taylorgreen2D_results",
-    plot_interval = 1000,
+    plot_interval = 10000,
     save_step = 10000,
     checkpoint = 10000,
     print_intermediate_info = 1000,
     compute_error = 1,
     use_krylov_solvers = False,
-    velocity_degree = 2,
-    pressure_degree = 1,
+    velocity_degree = 3,
+    pressure_degree = 2,
     krylov_report = False
 )
 NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
@@ -27,8 +27,8 @@ NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
                                    'relative_tolerance': 1e-10,
                                    'absolute_tolerance': 1e-10}
 
-def mesh(Nx, Ny, **params):
-    return RectangleMesh(0, 0, 2, 2, Nx, Ny)
+def mesh(N, **params):
+    return RectangleMesh(0, 0, 2, 2, N, N)
 
 class PeriodicDomain(SubDomain):
     
@@ -77,43 +77,68 @@ def initialize(q_, q_1, q_2, VV, t, nu, dt, initial_fields, **NS_namespace):
     q_1['p'].vector()[:] = q_['p'].vector()[:]
 
 total_error = zeros(3)
+
+
+def pre_solve_hook(velocity_degree, mesh, constrained_domain, **NS_namespace):
+
+    #Vv = VectorFunctionSpace(mesh, "CG", velocity_degree)
+    #Pv = FunctionSpace(mesh, "CG", pressure_degree)
+
+    V5 = FunctionSpace(mesh, "CG", 5+velocity_degree,
+            constrained_domain=constrained_domain)
+    #P5 = FunctionSpace(mesh, "CG", 5+pressure_degree)
+
+    #uv = Function(Vv)
+    #uv_e = interpolate(u_e, V5)
+    #pv_e = interpolate(p_e, P5)
+
+    #error_u = [1e10]
+    #error_p = [1e10]
+
+    return dict(V5=V5) 
+
+
 def temporal_hook(q_, t, nu, VV, dt, plot_interval, initial_fields, tstep, sys_comp, 
-                  compute_error, **NS_namespace):
+                  compute_error, V5, **NS_namespace):
     """Function called at end of timestep.    
 
     Plot solution and compute error by comparing to analytical solution.
     Remember pressure is computed in between timesteps.
     
     """
-    if tstep % plot_interval == 0:
-        plot(q_['u0'], title='u')
-        plot(q_['u1'], title='v')
-        plot(q_['p'], title='p')
-        interactive()
+    #if tstep % plot_interval == 0:
+        #plot(q_['u0'], title='u')
+        #plot(q_['u1'], title='v')
+        #plot(q_['p'], title='p')
+        #interactive()
         
     if tstep % compute_error == 0:
         err = {}
+
         for i, ui in enumerate(sys_comp):
             deltat_ = dt/2. if ui is 'p' else 0.
             ue = Expression((initial_fields[ui]), t=t-deltat_, nu=nu)
-            ue = interpolate(ue, VV[ui])
+            ue = interpolate(ue, V5) #VV[ui])
             uen = norm(ue.vector())
-            ue.vector().axpy(-1, q_[ui].vector())
-            error = norm(ue.vector())/uen
+            #ue.vector().axpy(-1, q_[ui].vector())
+            ue = project(ue - q_[ui], V5)
+            error = norm(ue.vector()) /uen
             err[ui] = "{0:2.6e}".format(norm(ue.vector())/uen)
             total_error[i] += error*dt     
         if MPI.rank(mpi_comm_world()) == 0:
             print "Error is ", err, " at time = ", t 
-        
-def theend_hook(mesh, q_, t, dt, nu, VV, sys_comp, initial_fields, **NS_namespace):
+
+
+def theend_hook(mesh, q_, t, dt, nu, VV, sys_comp, initial_fields, V5, **NS_namespace):
     final_error = zeros(len(sys_comp))
     for i, ui in enumerate(sys_comp):
         deltat = dt/2. if ui is 'p' else 0.
         ue = Expression((initial_fields[ui]), t=t-deltat, nu=nu)
-        ue = interpolate(ue, VV[ui])
+        ue = interpolate(ue, V5) #VV[ui])
         uen = norm(ue.vector())
-        ue.vector().axpy(-1, q_[ui].vector())
-        final_error[i] = norm(ue.vector())/uen
+        #ue.vector().axpy(-1, q_[ui].vector())
+        ue = project(ue - q_[ui], V5)
+        final_error[i] = norm(ue.vector()) / uen
         
     hmin = mesh.hmin()
     if MPI.rank(mpi_comm_world()) == 0:
@@ -126,4 +151,4 @@ def theend_hook(mesh, q_, t, dt, nu, VV, sys_comp, initial_fields, **NS_namespac
     if MPI.rank(mpi_comm_world()) == 0:
         print s0
         print s1
-    
+        print mesh.hmin()
