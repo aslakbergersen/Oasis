@@ -145,6 +145,7 @@ while t < (T - tstep*DOLFIN_EPS) and not stop:
     num_iter = max(iters_on_first_timestep, max_iter) if tstep == 1 else max_iter
     
     start_timestep_hook(**vars())
+    b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
     
     while udiff[0] > max_error and inner_iter < num_iter:
         inner_iter += 1

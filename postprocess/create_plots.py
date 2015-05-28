@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 from os import path, makedirs
 from compare import *
 from calculate_flux import *
-#from validation_matrix import *
+from validation_metric import *
 from fancy_plot import *
 
 def read_command_line():
@@ -10,7 +10,7 @@ def read_command_line():
     parser = ArgumentParser()
 
     # Define arguments
-    parser.add_argument('--c', '--compare', type=list,
+    parser.add_argument('--c', '--compare', type=str,
                         default=None,
                         help="A list of the runs you want to compare", metavar="compare")
     parser.add_argument('--l', '--latest', type=bool, default=True, 
@@ -20,9 +20,18 @@ def read_command_line():
     parser.add_argument('--d', '--destination', type=str,
                         default=None, metavar="destination",
                         help='Name of the folder you want the plots to be stored')
+    parser.add_argument('--leg', '--legend', type=str,
+                        default=None, metavar="destination",
+                        help='Legend on the plots, only for --c, --compare')
 
     args = parser.parse_args()
 
+    if args.leg is not None:
+        args.leg = eval(args.leg)
+        if not isinstance(args.leg, list):
+            print "Det funkaeke aa holda paa saan"
+            exit(1)
+    
     # Check if the choises are legal
     folder_path = path.join(path.dirname(__file__), "..", "nozzle_results", "data")
     if args.f is not None:
@@ -33,10 +42,12 @@ def read_command_line():
             args.l = False
 
     if args.c is not None:
+        args.c = eval(args.c)
+        args.c = [str(c) for c in args.c]
         if isinstance(args.c, list):
             for i in args.c:
-                if not path.isfolder(path.join(folder_path, i)):
-                    print "The run: %s does not exist." % args.f
+                if not path.isdir(path.join(folder_path, str(i))):
+                    print "The run: %s does not exist." % i
                     exit(1)
         else:
             print "Compare is not list"
@@ -55,7 +66,7 @@ def read_command_line():
                + "to compare with"
         exit(1)
 
-    return args.c, args.l, args.f, args.d
+    return args.c, args.l, args.f, args.d, args.leg
 
 
 def makefolders(filepath):
@@ -78,14 +89,15 @@ def makefolders(filepath):
 
 
 def main():
-    compare, latest, folder, destination = read_command_line()
+    compare, latest, folder, destination, legend = read_command_line()
     data = get_variance(get_data())
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
-    fancy_plot(results, data, filepath)
-    make_plots(results, data, filepath)
-    vizualize_flux(results, filepath)
-    #compute_validation_matrix(results, filepath)
+    fancy_plot(results, data, filepath, legend)
+    make_plots(results, data, filepath, legend)
+    if compare is None:
+        vizualize_flux(results, filepath)
+    compute_validation_matrix(results, data, filepath, legend)
 
 
 if __name__ == "__main__":

@@ -172,8 +172,10 @@ def get_results(latest, folder, compare):
     # Get data from all the runs
     else:
         data = {}
+        i = 0
         for folder in compare: 
             data[i] = get_data_results(path.join(folder_path, folder))
+            i += 1
 
     return data
 
@@ -205,28 +207,41 @@ def map_filenames(nozzle_header):
     return nozzle_header, element
 
 
-def make_plots(results, data, filepath):
+def make_plots(results, data, filepath, legend):
     """Match experimental data against numerical"""
+    color = ["r", "g", "y", "k"]
+
+    if 0 in results.keys():
+        comp_list = results.keys()
+    else:
+        comp_list = [0]
+        results_ = {}
+        results[0] = results
+
     for key in data.keys():
         key_re, element = map_filenames(key)
         if key_re is not None and "slice_u_r" not in key_re:
             plt.figure()
             plt.title(key)
             u = data[key]
-            plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o')
+            plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data")
             plt.hold("on")
-            u = results["array"][key_re]
-            x = results["points"]["_".join(key_re.split("_")[::2])]
-            if "slice" in key_re:
-                x = array([x_[0] for x_ in x])
+            for k in comp_list:
+                u = results[k]["array"][key_re]
+                x = results[k]["points"]["_".join(key_re.split("_")[::2])]
+                if "slice" in key_re:
+                    x = array([x_[0] for x_ in x])
+                else:
+                    x = array([x_[-1] for x_ in x])
+                if element != 0:
+                    u = array([u_[element] for u_ in u])
+                    plt.plot(x, u, color=color[k])
+                else:
+                    plt.plot(x, u, color=color[k])
+            if legend is not None:
+                plt.legend(["Data"] + legend)
             else:
-                x = array([x_[-1] for x_ in x])
-            if element != 0:
-                u = array([u_[element] for u_ in u])
-                plt.plot(x, u)
-            else:
-                plt.plot(x, u)
-            plt.legend(["Experiments", "Computational"])
+                plt.legend(["Experiments", "Computational"])
             plt.savefig(path.join(filepath, key_re + ".png"))
             #plt.show()
             plt.close()

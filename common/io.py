@@ -60,12 +60,13 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep, info_red,
 
 def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint, 
                   NS_parameters, tstepfiles, u_, u_components, scalar_components,
-                  output_timeseries_as_vector, constrained_domain, **NS_namespace):
+                  output_timeseries_as_vector, constrained_domain, 
+                  AssignedVectorFunction, **NS_namespace):
     """Called at end of timestep. Check for kill and save solution if required."""
     NS_parameters.update(t=t, tstep=tstep)
     if tstep % save_step == 0: 
         save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_domain,
-                               output_timeseries_as_vector, u_components,
+                               output_timeseries_as_vector, u_components, AssignedVectorFunction,
                                scalar_components, NS_parameters)
         
     killoasis = check_if_kill(folder)
@@ -76,7 +77,7 @@ def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
     return killoasis
 
 def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_domain,
-                           output_timeseries_as_vector, u_components,
+                           output_timeseries_as_vector, u_components, AssignedVectorFunction,
                            scalar_components, NS_parameters):
     """Store solution on current timestep to XDMF file."""
     timefolder = path.join(newfolder, 'Timeseries')
@@ -87,14 +88,10 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
                 V = q_['u0'].function_space()
                 # First time around create vector function and assigners
                 if not hasattr(tstepfile, 'uv'):
-                    Vv = VectorFunctionSpace(V.mesh(), V.ufl_element().family(), V.ufl_element().degree(),
-                                            constrained_domain=constrained_domain)
-                    tstepfile.uv = Function(Vv)
-                    tstepfile.fa = [FunctionAssigner(Vv.sub(i), V) for i, ui in enumerate(u_components)]
+                    tstepfile.uv = AssignedVectorFunction(u_)
 
                 # Assign solution to vector
-                for i, ui in enumerate(u_components):
-                    tstepfile.fa[i].assign(tstepfile.uv.sub(i), q_[ui])
+                tstepfile.uv()
                     
                 # Store solution vector
                 tstepfile << (tstepfile.uv, float(tstep))
@@ -112,7 +109,6 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
     if MPI.rank(mpi_comm_world()) == 0:
         if not path.exists(path.join(timefolder, "params.dat")):
             f = open(path.join(timefolder, 'params.dat'), 'w')
-            #print NS_parameters
             if NS_parameters.has_key("source_term"):
                 NS_parameters.pop("u_e")
                 NS_parameters.pop("p_e")
@@ -138,7 +134,8 @@ def save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components,
             system('cp {0} {1}'.format(path.join(checkpointfolder, "params.dat"),
                                         path.join(checkpointfolder, "params_old.dat")))
         f = open(path.join(checkpointfolder, "params.dat"), 'w')
-        cPickle.dump(NS_parameters,  f)
+        #print NS_parameters
+        #cPickle.dump(NS_parameters,  f)
         
     MPI.barrier(mpi_comm_world())
     for ui in q_:
