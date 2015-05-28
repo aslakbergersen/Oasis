@@ -11,8 +11,8 @@ from mpi4py.MPI import COMM_WORLD as comm
 import subprocess
 
 # Values for geometry
-start = -0.13
-stop = 0.21
+start = -0.12
+stop = 0.18
 r_0 = 0.006
 flow_rate = {  # From FDA
              500: 5.21E-6,
@@ -220,7 +220,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                 arr = np.load(path.join(newfolder, "Stats", file))
                 eval_dict[key].restart_probes(arr.flatten(), eval)
 
-	    if tstep*dt > 0.000002:
+	    if tstep*dt > 0.2:
 		eval_dict.pop("initial_u")
         
         else:
@@ -302,7 +302,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
 
         # Initial conditions is "washed away"
-        if tstep*dt > 0.0000002:
+        if tstep*dt > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n\t%s\n" % tstep + "="*25
             eval_dict.pop("initial_u")
