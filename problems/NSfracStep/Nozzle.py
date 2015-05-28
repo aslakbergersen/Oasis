@@ -12,7 +12,7 @@ import subprocess
 
 # Values for geometry
 start = -0.12
-stop = 0.18
+stop = 0.20
 r_0 = 0.006
 flow_rate = {  # From FDA
              500: 5.21E-6,
@@ -22,7 +22,7 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = "nozzle_results/data/12/Checkpoint"
+restart_folder = "nozzle_results/13M_P1P1/data/1/Checkpoint"
 #machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
 #nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
@@ -41,17 +41,17 @@ else:
                          rho=1056.,
                          nu=0.0035 / 1056.,
                          T=1e10,
-                         dt=5E-5,
+                         dt=2E-5,
                          folder="nozzle_results",
                          case=3500,
-                         save_tstep=10,
-                         checkpoint=10,
-                         check_steady=5,
-                         eval_t=1,
-                         plot_t=500,
+                         save_tstep=1000,
+                         checkpoint=1000,
+                         check_steady=500,
+                         eval_t=100,
+                         plot_t=5000,
                          velocity_degree=1,
                          pressure_degree=1,
-                         mesh_path="mesh/1M_boundary_uniform_nozzle.xml",
+                         mesh_path="mesh/3M_boundary_refined_nozzle_constant_inlet.xml",
                          print_intermediate_info=1000,
                          use_lumping_of_mass_matrix=False,
                          low_memory_version=False,
@@ -217,7 +217,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
                 arr = np.load(path.join(newfolder, "Stats", file))
                 eval_dict[key].restart_probes(arr.flatten(), eval)
 
-	    if tstep*dt > 0.000002:
+	    if tstep*dt > 0.2:
 		eval_dict.pop("initial_u")
         
         else:
@@ -299,7 +299,7 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
             print "Flux in: %e out: %e walls:%e" % (inlet_flux, outlet_flux, walls_flux)
 
         # Initial conditions is "washed away"
-        if tstep*dt > 0.0000002:
+        if tstep*dt > 0.2:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "="*25 + "\n DONE WITH FIRST ROUND\n\t%s\n" % tstep + "="*25
             eval_dict.pop("initial_u")

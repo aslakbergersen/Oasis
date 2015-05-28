@@ -2,7 +2,7 @@ from numpy import *
 from os import path, listdir
 
 data_path = path.join("..", "nozzle_results", "data")
-for folder in ["13"]:#listdir(data_path):
+for folder in ["121", "126", "127"]:
     for stat in listdir(path.join(data_path, folder, "Stats")):
         if stat != "Points":
             tmp_arr = load(path.join(data_path, folder, "Stats", stat))
