@@ -48,14 +48,14 @@ def find_f():
     #t_ = 1e-5
     t_ = 1
     #u = 0.3*sp.tanh(sp.pi * (y+x+z)) + 0.4*sp.tanh(sp.pi*(3*y+2.3*z)) 
-    #u = (2.1*sp.tanh(sp.pi*(x+y)) + 0.5*sp.tanh(sp.pi*y) + eps) * (t/t_ + 0.2)  
-    u =  sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*y) + eps
+    u = (2.1*sp.tanh(sp.pi*(x+y)) + 0.5*sp.tanh(sp.pi*y) + eps) * sp.sin(t/t_ + 0.2)  
+    #u =  sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*y) + eps
     #v = 0.3*sp.tanh(sp.pi*(y+x+z)) + 1.3*sp.tanh(sp.pi*(1.2*x+0.3*z))
-    #v = (-2.1*sp.tanh(sp.pi*(x+y)) + 1.3*sp.tanh(sp.pi*x) + eps) * (t/t_ + 0.2)
-    v = -sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*x) + eps
+    v = (-2.1*sp.tanh(sp.pi*(x+y)) + 1.3*sp.tanh(sp.pi*x) + eps) * sp.sin(t/t_ + 0.2)
+    #v = -sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*x) + eps
     #p = (sp.tanh(sp.pi*(2.1*x+1.2*y+0.3*z)) + eps)  #*sp.sin(sp.pi*t) + eps    
-    #p = (eps * sp.tanh(sp.pi*(x + y)) + eps) * (t/t_ + 0.3)
-    p = (eps * sp.tanh(sp.pi*(x + y)) + eps) 
+    p = (eps * sp.tanh(sp.pi*(x + y)) + eps) * sp.sin(t/t_ + 0.3)
+    #p = (eps * sp.tanh(sp.pi*(x + y)) + eps) 
 
     dudx = sp.diff(u,x)
     dvdy = sp.diff(v,y)
@@ -127,9 +127,9 @@ recursive_update(NS_parameters,
                      source_term=rhs[3],
                      print_intermediate_info=1000,
                      use_lumping_of_mass_matrix=False,
-                     #max_iter=100,
+                     max_iter=100,
                      plot_interval=1000,
-                     #max_error=1e-12,
+                     max_error=1e-12,
                      low_memory_version=False,
                      use_krylov_solvers=True,
                      #krylov_report=False,
@@ -146,11 +146,11 @@ def mesh(u_seg, N, **NS_namespace):
 
 
 def boundary(x, on):
-    return on ##and not right(x, on)
+    return on 
 
 
 def right(x, on):
-    return on and near(x[0], 0)
+    return on 
 
 
 def create_bcs(u_seg, p_e, sys_comp, V, Q, **NS_namespce):
@@ -178,6 +178,7 @@ def initialize(q_1, q_, q_2, u_e, p_e, VV, u_seg, t, dt, **NS_namespace):
             q_2[ui].vector()[:] = vv.vector()[:]
         q_1['p'].vector()[:] = q_['p'].vector()[:]
 
+
 def body_force(source_term, **NS_namespace):
     return source_term
 
@@ -193,7 +194,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, u_e,
     error_u = {'u0': [1e10], 'u1': [1e10], 'p': [1e10]}
 
     return dict(error_u=error_u, V5=V5) 
- 
+
 
 def start_timestep_hook(t, u_seg, f, dt, p_e, u_e, **NS_namespace):
     for i in range(len(u_seg)):
@@ -206,6 +207,7 @@ def start_timestep_hook(t, u_seg, f, dt, p_e, u_e, **NS_namespace):
 def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
                   error_u, mesh, q_, folder, V5, sys_comp, **NS_namespace):
 
+    print tstep
     if tstep % check_steady == 0 and tstep > 2:
         for i, ui in enumerate(sys_comp):
     
@@ -216,14 +218,15 @@ def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
             error = norm(diff) / uen
             error_u[ui].append(error)
 
-            #plot(diff, title=ui, interactive=True)
+            if ui == "p":
+                plot(diff, title=ui, interactive=True)
 
             print "%s: %s" % (ui, error_u[ui][-1])
 
-            #if tstep*dt >= 1:
-            if abs(error_u['u0'][-1] - error_u['u0'][-2]) < 1e-9 and \
-               abs(error_u['u1'][-1] - error_u['u1'][-2]) < 1e-9 and \
-               abs(error_u['p'][-1] - error_u['p'][-2]) < 1e-9:
+            if tstep*dt >= 1:
+            #if abs(error_u['u0'][-1] - error_u['u0'][-2]) < 1e-9 and \
+            #   abs(error_u['u1'][-1] - error_u['u1'][-2]) < 1e-9 and \
+            #   abs(error_u['p'][-1] - error_u['p'][-2]) < 1e-9:
                 kill = open(folder + '/killoasis', 'w')
                 kill.close()
 

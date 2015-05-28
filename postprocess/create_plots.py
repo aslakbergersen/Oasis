@@ -97,7 +97,7 @@ def main():
     make_plots(results, data, filepath, legend)
     if compare is None:
         vizualize_flux(results, filepath)
-    compute_validation_matrix(results, data, filepath, legend)
+    #compute_validation_matrix(results, data, filepath, legend)
 
 
 if __name__ == "__main__":

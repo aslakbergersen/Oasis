@@ -71,6 +71,7 @@ def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
         
     killoasis = check_if_kill(folder)
     if tstep % checkpoint == 0 or killoasis:
+        print checkpoint
         save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components, 
                                     NS_parameters)
         
@@ -114,6 +115,8 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
                 NS_parameters.pop("p_e")
                 NS_parameters.pop("source_term")
                 NS_parameters.pop("u_seg")
+            print "Do a dump of parameters"
+            print NS_parameters
             cPickle.dump(NS_parameters,  f)
 
 def save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components, 

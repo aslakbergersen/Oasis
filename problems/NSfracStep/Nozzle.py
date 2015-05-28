@@ -11,8 +11,8 @@ from mpi4py.MPI import COMM_WORLD as comm
 import subprocess
 
 # Values for geometry
-start = -0.12
-stop = 0.18
+start = -0.13
+stop = 0.21
 r_0 = 0.006
 flow_rate = {  # From FDA
              500: 5.21E-6,
@@ -22,42 +22,45 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-restart_folder = "nozzle_results/data/12/Checkpoint"
+#restart_folder = None #"nozzle_results/data/12/Checkpoint"
 #machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
 #nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
-if restart_folder is not None:
-    restart_folder = path.join(getcwd(), restart_folder)
-    f = open(path.join(restart_folder, 'params.dat'), 'r')
-    NS_parameters.update(cPickle.load(f))
-    NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt']
-    NS_parameters['restart_folder'] = restart_folder
-    globals().update(NS_parameters)
-else:
-    # Override some problem specific parameters
-    recursive_update(NS_parameters,
-                    dict(mu=0.0035,
-                         rho=1056.,
-                         nu=0.0035 / 1056.,
-                         T=1e10,
-                         dt=5E-5,
-                         folder="nozzle_results",
-                         case=3500,
-                         save_tstep=10,
-                         checkpoint=10,
-                         check_steady=5,
-                         eval_t=1,
-                         plot_t=500,
-                         velocity_degree=1,
-                         pressure_degree=1,
-                         mesh_path="mesh/1M_boundary_uniform_nozzle.xml",
-                         print_intermediate_info=1000,
-                         use_lumping_of_mass_matrix=False,
-                         low_memory_version=False,
-                         use_krylov_solvers=True,
-                         krylov_solvers=dict(monitor_convergence=False,
-                                          relative_tolerance=1e-8)))
+def update(commandline_kwargs, NS_parameters, **NS_namespace):
+    if commandline_kwargs.has_key("restart_folder"):
+        restart_folder = commandline_kwargs["restart_folder"]
+        restart_folder = path.join(getcwd(), restart_folder)
+        f = open(path.join(restart_folder, 'params.dat'), 'r')
+        NS_parameters.update(cPickle.load(f))
+        NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt']
+        NS_parameters['restart_folder'] = restart_folder
+        globals().update(NS_parameters)
+    else:
+        # Override some problem specific parameters
+        d = recursive_update(NS_parameters,
+                        dict(mu=0.0035,
+                            rho=1056.,
+                            nu=0.0035 / 1056.,
+                            T=1e10,
+                            dt=5E-5,
+                            folder="nozzle_results",
+                            case=3500,
+                            save_tstep=10,
+                            checkpoint=1,
+                            check_steady=5,
+                            eval_t=1,
+                            plot_t=500,
+                            velocity_degree=1,
+                            pressure_degree=1,
+                            mesh_path="mesh/course_mesh_for_Oasis.xml.gz",
+                            print_intermediate_info=1000,
+                            use_lumping_of_mass_matrix=False,
+                            low_memory_version=False,
+                            use_krylov_solvers=True,
+                            krylov_solvers=dict(monitor_convergence=False,
+                                            relative_tolerance=1e-8)))
+        globals().update(d)
     
 
 def mesh(mesh_path, **NS_namespace):

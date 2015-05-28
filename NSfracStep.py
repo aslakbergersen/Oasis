@@ -36,7 +36,7 @@ commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
 exec("from problems.NSfracStep.{} import *".format(commandline_kwargs.get('problem', default_problem)))
-
+update(**vars())
 # Update current namespace with NS_parameters and commandline_kwargs ++
 vars().update(post_import_problem(**vars()))
 
