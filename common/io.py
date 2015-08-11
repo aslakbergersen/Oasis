@@ -41,6 +41,7 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep, info_red,
         if not restart_folder:
             #makedirs(path.join(newfolder, "Voluviz"))
             makedirs(path.join(newfolder, "Stats", "Points"))
+            makedirs(path.join(newfolder, "Stats", "Probes"))
             makedirs(path.join(newfolder, "VTK"))
             makedirs(path.join(newfolder, "Timeseries"))
             makedirs(path.join(newfolder, "Checkpoint"))
@@ -71,7 +72,6 @@ def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
         
     killoasis = check_if_kill(folder)
     if tstep % checkpoint == 0 or killoasis:
-        print checkpoint
         save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components, 
                                     NS_parameters)
         
@@ -115,8 +115,6 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
                 NS_parameters.pop("p_e")
                 NS_parameters.pop("source_term")
                 NS_parameters.pop("u_seg")
-            print "Do a dump of parameters"
-            print NS_parameters
             cPickle.dump(NS_parameters,  f)
 
 def save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components, 
@@ -137,8 +135,7 @@ def save_checkpoint_solution_h5(tstep, q_, q_1, newfolder, u_components,
             system('cp {0} {1}'.format(path.join(checkpointfolder, "params.dat"),
                                         path.join(checkpointfolder, "params_old.dat")))
         f = open(path.join(checkpointfolder, "params.dat"), 'w')
-        #print NS_parameters
-        #cPickle.dump(NS_parameters,  f)
+        cPickle.dump(NS_parameters,  f)
         
     MPI.barrier(mpi_comm_world())
     for ui in q_:
