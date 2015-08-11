@@ -137,11 +137,9 @@ def get_data_results(folder_path):
     for file in listdir(stat_path):
         if path.isfile(path.join(stat_path, file)):
             if "senterline_u" in file and int(file.split("_")[-1]) > data["num"]:
-                print "New num:", int(file.split("_")[-1]) 
                 data["num"] = int(file.split("_")[-1])
 
     # Get data
-    print data["num"]
     for file in listdir(stat_path):
         if path.isfile(path.join(stat_path, file)):
             key = "_".join(file.split("_")[:-1])
@@ -209,7 +207,7 @@ def map_filenames(nozzle_header):
 
 def make_plots(results, data, filepath, legend):
     """Match experimental data against numerical"""
-    color = ["r", "g", "y", "k"]
+    color = ["r", "g", "y", "k", "b"]
 
     if 0 in results.keys():
         comp_list = results.keys()
@@ -227,7 +225,10 @@ def make_plots(results, data, filepath, legend):
             plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data")
             plt.hold("on")
             for k in comp_list:
-                u = results[k]["array"][key_re]
+                if key_re.split("_")[-1] == "p":
+                    u = results[k]["array"][key_re]*1056
+                else:
+                    u = results[k]["array"][key_re]
                 x = results[k]["points"]["_".join(key_re.split("_")[::2])]
                 if "slice" in key_re:
                     x = array([x_[0] for x_ in x])
@@ -237,7 +238,7 @@ def make_plots(results, data, filepath, legend):
                     u = array([u_[element] for u_ in u])
                     plt.plot(x, u, color=color[k])
                 else:
-                    plt.plot(x, u, color=color[k])
+                    plt.plot(x, u[:,0], color=color[k])
             if legend is not None:
                 plt.legend(["Data"] + legend)
             else:
