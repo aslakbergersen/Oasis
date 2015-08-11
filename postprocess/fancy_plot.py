@@ -32,7 +32,7 @@ def fancy_plot(results, data, filepath, leg):
     ylabel("r [m]")
     #p.set_xticks([-1, 0, 2, 8, 15, 20])
     
-    color = ["r", "g", "y", "k"]
+    color = ["r", "g", "y", "k", "b"]
 
     # Plot experimental data
     for key in data.keys():
