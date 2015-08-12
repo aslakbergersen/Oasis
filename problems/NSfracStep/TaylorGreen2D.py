@@ -10,16 +10,16 @@ NS_parameters.update(
     nu = 0.01,
     T = 1.,
     dt = 0.001,
-    N = 20,# Ny = 20,
+    Nx = 20, Ny = 20,
     folder = "taylorgreen2D_results",
-    plot_interval = 10000,
+    plot_interval = 1000,
     save_step = 10000,
     checkpoint = 10000,
     print_intermediate_info = 1000,
     compute_error = 1,
-    use_krylov_solvers = False,
-    velocity_degree = 3,
-    pressure_degree = 2,
+    use_krylov_solvers = True,
+    velocity_degree = 1,
+    pressure_degree = 1,
     krylov_report = False
 )
 NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
@@ -27,8 +27,8 @@ NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
                                    'relative_tolerance': 1e-10,
                                    'absolute_tolerance': 1e-10}
 
-def mesh(N, **params):
-    return RectangleMesh(0, 0, 2, 2, N, N)
+def mesh(Nx, Ny, **params):
+    return RectangleMesh(0, 0, 2, 2, Nx, Ny)
 
 class PeriodicDomain(SubDomain):
     
