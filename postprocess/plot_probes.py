@@ -34,7 +34,7 @@ def sort(list):
 def plot_probes(folder_path):
     """Plot instantanius velocity profiles at probe points"""
     files = listdir(folder_path)
-    if not path.isdir(path.join(folder_path, "..", "Plots"))
+    if not path.isdir(path.join(folder_path, "..", "Plots")):
         makedirs(path.join(folder_path, "..", "Plots"))
     dest_path = path.join(folder_path, "..", "Plots")
 
@@ -42,6 +42,7 @@ def plot_probes(folder_path):
     u_files = sort([path.join(folder_path, f) for f in files if "u_" in f])
     p_files = sort([path.join(folder_path, f) for f in files if "p_" in f])
     points = np.load(path.join(folder_path, "points"))
+    print u_files
 
     # Informations on shape of data
     tstep = [int(f.split("_")[-2]) for f in u_files]

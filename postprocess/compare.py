@@ -15,7 +15,7 @@ def get_data():
     # Check all files
     for file in files:
         # Only read files for this case
-        if file.split("_")[-2] == "3500": #and file.split("_")[-1] == "243.txt":
+        if file.split("_")[-2] == "3500":
             tmp = open(path.join(results_dir, file), "r")
             tmp = tmp.readlines()
 
