@@ -50,7 +50,7 @@ def update(commandline_kwargs, NS_parameters, **NS_namespace):
                             checkpoint=1000,
                             check_steady=300,
                             eval_t=50,
-                            plot_t=500,
+                            plot_t=10,
                             velocity_degree=1,
                             pressure_degree=1,
                             mesh_path="mesh/course_mesh_for_Oasis.xml.gz",
@@ -161,18 +161,15 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     # Container for all StatisticsProbes
     eval_dict = {}
     key_u = "slice_u_%s"
-    key_ss = "slice_ss_%s"
 
     eps = 1e-8
     n_slice = 200
     for i in range(len(z)):
         # Set up dict for the slices
         u_ = key_u % z[i]
-        ss_ = key_ss % z[i]
         slices_points = linspace(-radius[i], radius[i], n_slice)
         points = array([[x, 0, z[i]] for x in slices_points])
         eval_dict[u_] = StatisticsProbes(points.flatten(), Pv, True) 
-        eval_dict[ss_] = StatisticsProbes(points.flatten(), Pv, True)
 
         # Store points
         points.dump(path.join(newfolder, "Stats", "Points", "slice_%s" % z[i]))
@@ -204,18 +201,22 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall"))
 
     # Make probe points
-    probe_list = [-25] + range(-15, 0, 1) + range(21) + [30, 40]
-    probe_points = np.array([[0, 0, r_1*2*i] for i in probe_list])
+    probe_list = [-25] + range(-15, 0, 2) + range(16) + [20, 30, 40]
+    probe_points = []
+    for j in range(2, -3, -1):
+    	probe_points += [[r_1*j, 0, r_1*2*i] for i in probe_list]
+    probe_points = array(probe_points)
     probe_points.dump(path.join(newfolder, "Stats", "Probes", "points"))
     
     eval_dict["senterline_u"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
     eval_dict["senterline_p"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
-    eval_dict["senterline_ss"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
     eval_dict["initial_u"] = StatisticsProbes(eval_senter.flatten(), Pv, True)
     eval_dict["wall_p"] = StatisticsProbes(eval_wall.flatten(), Pv, True)
-    eval_dict["wall_ss"] = StatisticsProbes(eval_wall.flatten(), Pv, True)
     eval_dict["senterline_u_probes"] = Probes(probe_points.flatten(), Vv)
     eval_dict["senterline_p_probes"] = Probes(probe_points.flatten(), Pv)
+
+    # Finding the mean velocity
+    u_mean = {"u": Function(Vv), "num": 0}
 
     if restart_folder is None:
         # Print header
@@ -240,29 +241,19 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
 
 	    if tstep*dt > 0.4:
 		eval_dict.pop("initial_u")
-        
         else:
             if MPI.rank(mpi_comm_world()) == 0:
                 print "WARNING: The stats folder is empty and the stats is not restarted"
 
-    # For length scale
-    h = CellVolume(mesh)
-    dl = project(12/math.sqrt(2) * h**(1./3), DG)
-    l_pluss = Function(DG)
-    t_pluss = Function(DG)
+        # Restart mean velocity
+        files = listdir(path.join(newfolder, "VTK"))
+        files = [path.join(newfolder, "VTK", f) for f in files if "u_mean_num" in f]
+        if files != []:
+            file = sorted(files, key= lambda x: int(x.split("_")[2][3:]))[0]
+            u_mean["num"] = int(file.split("_")[2][3:])
+            tmp = Function(Vv, file)
+            u_mean["u"].vector().axpy(u_mean["num"], tmp.vector()) 
 
-    # For stress eval
-    v = TestFunction(DG)
-    ssv = Function(DG)
-    def stress(u):
-        def epsilon(u):
-            return 0.5*(grad(u) + grad(u).T)
-        f = 2*mu*sqrt(inner(epsilon(u),epsilon(u)))
-        x = assemble(inner(f, v)/h*dx(mesh))
-        ssv.vector().set_local(x.array())
-        ssv.vector().apply("insert")
-        return ssv
-    
     def norm_l(u, l=2):
         if l == "max":
             return np.max(abs(u.flatten()))
@@ -272,12 +263,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     # Files to store plot
     file_u = path.join(newfolder, "VTK", "velocity%06.0f.xml.gz")
     file_p = path.join(newfolder, "VTK", "pressure%06.0f.xml.gz")
-    file_ss = path.join(newfolder, "VTK", "stress%06.0f.xml.gz")
-    file_l = path.join(newfolder, "VTK", "length_scale%06.0f.xml.gz")
-    file_t = path.join(newfolder, "VTK", "time_scale%06.0f.xml.gz")
-    file_v = path.join(newfolder, "VTK", "velocity_scale%06.0f.xml.gz")
-    files = {"u": file_u, "p": file_p, "ss": file_ss,
-             "t": file_t, "l": file_l, "v": file_v}
+    files = {"u": file_u, "p": file_p}
 
     # For flux evaluation in inlet, outlet and walls
     normal = FacetNormal(mesh)
@@ -292,26 +278,21 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     # For stopping criteria
     prev = [zeros((N, 3))]
 
-    return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, stress=stress, prev=prev,
+    return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, prev=prev,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal, domains=domains, 
-                dl=dl, l_pluss=l_pluss, t_pluss=t_pluss, uv=uv)
+                uv=uv, u_mean=u_mean)
 
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
-                  norm_l, nu, z, rho, DG, eval_t, files, T, folder, stress, prev,
-                  normal, dt, domains, plot_t, checkpoint, dl, t_pluss, l_pluss,
-                  uv, **NS_namespace):
+                  norm_l, nu, z, rho, DG, eval_t, files, T, folder, prev, u_mean,
+                  normal, dt, domains, plot_t, checkpoint, uv, **NS_namespace):
     # Print timestep
     if tstep % eval_t == 0:
         if MPI.rank(mpi_comm_world()) == 0:
             print tstep
 
-    if tstep % check_steady == 0 and eval_dict.has_key("initial_u"): 
-        # Store vtk files for post prosess in paraview 
-        [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
-	file_u = File(files['u'] % tstep)
-        file_u << uv, T * tstep
-
+    if tstep % check_steady == 0 and eval_dict.has_key("initial_u"):
+	[assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())] 
         inlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](1))
         outlet_flux = assemble(dot(uv, normal)*ds(mesh)[domains](2))
         walls_flux = assemble(dot(uv, normal)*ds(mesh)[domains](3))
@@ -327,30 +308,18 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
     
     if not eval_dict.has_key("initial_u"):
         # Evaluate points
-        ssv = stress(as_vector(u_))
-        evaluate_points(eval_dict, {"u": u_, "p": p_, "ss": ssv}, uv)
+        [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
+        evaluate_points(eval_dict, {"u": u_, "p": p_}, uv)
+        u_mean["u"].vector()[:] += uv.vector()
+        u_mean["num"] += 1 
 
         if tstep % plot_t == 0:
-            # Compute scales for mesh evaluation
-            [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
-
-            u_star = ssv.vector().array() / (2 * rho)
-
-            l_pluss.vector().set_local(np.sqrt(u_star) * dl.vector().array() / nu)
-            l_pluss.vector().apply("insert")
-
-            t_pluss.vector().set_local(nu / u_star)
-            t_pluss.vector().apply("insert")
-
-            l_pluss.rename("l+", "length scale")
-            t_pluss.rename("t+", "time scale")
-            ssv.rename("Shear stress", "Shear stress")
             uv.rename("u", "velocity")
             p_.rename("p", "pressure")
 
             # Store vtk files for post process in paraview 
             t_ = T * tstep
-            components = {"u": uv, "l": l_pluss, "t": t_pluss, "p": p_, "ss": ssv}
+            components = {"u": uv, "p": p_}
             for key in components.keys():
 	        file = File(files[key] % tstep)
                 file << components[key], t_
@@ -384,8 +353,20 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
                     kill.close()
                 MPI.barrier(mpi_comm_world())
 
-    if tstep % checkpoint == 0:
-        dump_stats(eval_dict, newfolder, dt, tstep)
+        if tstep % checkpoint == 0 and not eval_dict.has_key("initial_u"):
+            dump_stats(eval_dict, newfolder, dt, tstep)
+            dump_mean(u_mean, newfolder, tstep, dt, Vv)
+
+
+def dump_mean(u_mean, newfolder, tstep, dt, Vv):
+     filepath = path.join(newfolder, "VTK")
+
+     # Back up u_mean
+     file = File(path.join(filepath, "u_mean_num%s_tstep%s_dt%s.xml.gz" % \
+                                              (u_mean["num"], tstep, dt)))
+     tmp = Function(Vv)
+     tmp.vector().axpy(1. / u_mean["num"], u_mean["u"].vector())
+     file << tmp
 
 
 def dump_stats(eval_dict, newfolder, dt, tstep):
@@ -401,9 +382,6 @@ def dump_stats(eval_dict, newfolder, dt, tstep):
             value.clear()
         if MPI.rank(mpi_comm_world()) == 0:
             if key.split("_")[-1] == "probes":
-                #value.dump(path.join(filepath, "Probes", key.split("_")[1] + "_" + str(dt) + \
-                #                   "_" + str(tstep)))
-                #value.clear()
                 continue
             arr = arr / value.number_of_evaluations()
             arr.dump(path.join(filepath, key + "_" + str(value.number_of_evaluations())))
@@ -427,7 +405,6 @@ def evaluate_points(eval_dict, eval_map, uv):
             # Segregated probe eval
             value(sample[0], sample[1], sample[2])
         elif k == "u":
-            [assign(uv.sub(i), sample[i]) for i in range(3)]
             value(uv)
         else:
             value(sample)
