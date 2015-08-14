@@ -46,15 +46,15 @@ def dolfincode(expr, assign_to=None, **settings):
 def find_f():
     x, y, z, t, nu, eps = sp.symbols('x y z t nu eps')
     #t_ = 1e-5
-    t_ = 1
+    #t_ = 1
     #u = 0.3*sp.tanh(sp.pi * (y+x+z)) + 0.4*sp.tanh(sp.pi*(3*y+2.3*z)) 
-    u = (2.1*sp.tanh(sp.pi*(x+y)) + 0.5*sp.tanh(sp.pi*y) + eps) * sp.sin(t/t_ + 0.2)  
+    u = (2.1*sp.tanh(sp.pi*(x+y)) - 0.5*sp.tanh(sp.pi*y) + eps) * (t + 0.2)  
     #u =  sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*y) + eps
     #v = 0.3*sp.tanh(sp.pi*(y+x+z)) + 1.3*sp.tanh(sp.pi*(1.2*x+0.3*z))
-    v = (-2.1*sp.tanh(sp.pi*(x+y)) + 1.3*sp.tanh(sp.pi*x) + eps) * sp.sin(t/t_ + 0.2)
+    v = (-2.1*sp.tanh(sp.pi*(x+y)) + 1.3*sp.tanh(sp.pi*x) + eps) * (t + 0.2)
     #v = -sp.sin(sp.pi*(x+y)) + sp.cos(sp.pi*x) + eps
     #p = (sp.tanh(sp.pi*(2.1*x+1.2*y+0.3*z)) + eps)  #*sp.sin(sp.pi*t) + eps    
-    p = (eps * sp.tanh(sp.pi*(x + y)) + eps) * sp.sin(t/t_ + 0.3)
+    p = (eps * sp.sin(sp.pi*(x + y)) * sp.cos((x + y)*sp.pi) + eps) * (t + 0.3)
     #p = (eps * sp.tanh(sp.pi*(x + y)) + eps) 
 
     dudx = sp.diff(u,x)
@@ -109,33 +109,35 @@ def find_f():
     return exact_u, exact_p, u_,  f
 
 
-rhs = find_f()
-recursive_update(NS_parameters,
-                dict(nu=0.1,
-                     T=1e10,
-                     dt=0.1,
-                     N=10,
-                     folder="MMS_results",
-                     save_tstep=1000e9,
-                     checkpoint=1000e9,
-                     check_steady=5,
-                     velocity_degree=2,
-                     pressure_degree=1,
-                     u_e=rhs[0],
-                     p_e=rhs[1],
-                     u_seg=rhs[2],
-                     source_term=rhs[3],
-                     print_intermediate_info=1000,
-                     use_lumping_of_mass_matrix=False,
-                     max_iter=100,
-                     plot_interval=1000,
-                     max_error=1e-12,
-                     low_memory_version=False,
-                     use_krylov_solvers=True,
-                     #krylov_report=False,
-                     krylov_solvers=dict(monitor_convergence=False,
-                                    relative_tolerance=1e-10,
-                                    absolute_tolerance=1e-10))) 
+def update(**NS_namespace):
+    rhs = find_f()
+    d = recursive_update(NS_parameters,
+                    dict(nu=0.1,
+                        T=1e10,
+                        dt=0.1,
+                        N=10,
+                        folder="MMS_results",
+                        save_tstep=1000e9,
+                        checkpoint=1000e9,
+                        check_steady=5,
+                        velocity_degree=3,
+                        pressure_degree=2,
+                        u_e=rhs[0],
+                        p_e=rhs[1],
+                        u_seg=rhs[2],
+                        source_term=rhs[3],
+                        print_intermediate_info=1000,
+                        use_lumping_of_mass_matrix=False,
+                        max_iter=100,
+                        plot_interval=1000,
+                        max_error=1e-12,
+                        low_memory_version=False,
+                        use_krylov_solvers=True,
+                        krylov_report=False,
+                        krylov_solvers=dict(monitor_convergence=False,
+                                        relative_tolerance=1e-10,
+                                        absolute_tolerance=1e-10)))
+    globals().update(d)
 
 
 def mesh(u_seg, N, **NS_namespace):
@@ -146,11 +148,11 @@ def mesh(u_seg, N, **NS_namespace):
 
 
 def boundary(x, on):
-    return on 
+    return on #and not right(x, on)
 
 
 def right(x, on):
-    return on 
+    return on #and near(x[0], 0)
 
 
 def create_bcs(u_seg, p_e, sys_comp, V, Q, **NS_namespce):
@@ -163,6 +165,7 @@ def create_bcs(u_seg, p_e, sys_comp, V, Q, **NS_namespce):
 
 
 def initialize(q_1, q_, q_2, u_e, p_e, VV, u_seg, t, dt, **NS_namespace):
+    #pass
     init = {"u0": u_seg[0], "u1": u_seg[1], "p": p_e}
     if len(u_seg) > 2:
         init["u2"] = u_seg[2]
@@ -189,7 +192,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, u_e,
     Vv = VectorFunctionSpace(mesh, "CG", velocity_degree)
     Pv = FunctionSpace(mesh, "CG", pressure_degree)
 
-    V5 = FunctionSpace(mesh, "CG", 5 + velocity_degree)#,
+    V5 = FunctionSpace(mesh, "CG", 5 + velocity_degree)
 
     error_u = {'u0': [1e10], 'u1': [1e10], 'p': [1e10]}
 
@@ -199,9 +202,9 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, u_e,
 def start_timestep_hook(t, u_seg, f, dt, p_e, u_e, **NS_namespace):
     for i in range(len(u_seg)):
         u_seg[i].t = t
-    p_e.t = t-dt/2.
+    p_e.t = t - dt/2.
     u_e.t = t
-    f.t = t
+    f.t = t - dt/2.
 
 
 def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
@@ -209,8 +212,7 @@ def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
 
     print tstep
     if tstep % check_steady == 0 and tstep > 2:
-        for i, ui in enumerate(sys_comp):
-    
+        for i, ui in enumerate(sys_comp): 
             u_e = p_e if i == len(u_seg) else u_seg[i]
             u_e = interpolate(u_e, V5)
             uen = norm(u_e)
@@ -218,15 +220,12 @@ def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
             error = norm(diff) / uen
             error_u[ui].append(error)
 
-            if ui == "p":
-                plot(diff, title=ui, interactive=True)
-
             print "%s: %s" % (ui, error_u[ui][-1])
 
-            if tstep*dt >= 1:
-            #if abs(error_u['u0'][-1] - error_u['u0'][-2]) < 1e-9 and \
-            #   abs(error_u['u1'][-1] - error_u['u1'][-2]) < 1e-9 and \
-            #   abs(error_u['p'][-1] - error_u['p'][-2]) < 1e-9:
+            if tstep*dt >= 4:
+               #abs(error_u['u0'][-1] - error_u['u0'][-2]) < 1e-9 and \
+               #abs(error_u['u1'][-1] - error_u['u1'][-2]) < 1e-9 and \
+               #abs(error_u['p'][-1] - error_u['p'][-2]) < 1e-9:
                 kill = open(folder + '/killoasis', 'w')
                 kill.close()
 
