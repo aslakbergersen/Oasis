@@ -180,7 +180,8 @@ def get_results(latest, folder, compare):
 
 def map_filenames(nozzle_header):
     """Map the naming convensions and dissreagard unused data"""
-    if "reynolds-stress" in nozzle_header or "jet-width" in nozzle_header:
+    if "reynolds-stress" in nozzle_header or "jet-width" in nozzle_header \
+            or "shear-stress" in nozzle_header:
         return None, None
 
     if "pressure" in nozzle_header or "shear-stress" in nozzle_header:

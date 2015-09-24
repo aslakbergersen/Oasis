@@ -1,4 +1,5 @@
-from scitools.std import *
+from matplotlib.pyplot import *
+
 
 filenames = ["logs/Uz_0", "logs/k_0", "logs/epsilon_0", "logs/p_0", "logs/Ux_0", \
             "logs/Uy_0"]
