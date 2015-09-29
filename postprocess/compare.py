@@ -15,7 +15,7 @@ def get_data():
     # Check all files
     for file in files:
         # Only read files for this case
-        if file.split("_")[-2] == "3500":
+        if file.split("_")[-2] == "6500":
             tmp = open(path.join(results_dir, file), "r")
             tmp = tmp.readlines()
 
@@ -219,7 +219,7 @@ def make_plots(results, data, filepath, legend):
 
     for key in data.keys():
         key_re, element = map_filenames(key)
-        if key_re is not None and "slice_u_r" not in key_re:
+        if key_re is not None and "slice_u_r" not in key_re and "deleted" not in key_re:
             plt.figure()
             plt.title(key)
             u = data[key]
@@ -241,7 +241,7 @@ def make_plots(results, data, filepath, legend):
                 else:
                     plt.plot(x, u[:,0], color=color[k])
             if legend is not None:
-                plt.legend(["Data"] + legend)
+                plt.legend(["Data"] + legend, loc=2)
             else:
                 plt.legend(["Experiments", "Computational"])
             plt.savefig(path.join(filepath, key_re + ".png"))
