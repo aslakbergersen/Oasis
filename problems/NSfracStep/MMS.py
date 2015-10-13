@@ -218,15 +218,20 @@ def temporal_hook(u_, p_, u_seg, p_e, check_steady, tstep, dt, t,
     if tstep % check_steady == 0 and tstep > 2:
         for i, ui in enumerate(sys_comp): 
             u_e = p_e if i == len(u_seg) else u_seg[i]
+            print "Compute u_"
             u_e = interpolate(u_e, V5)
+            num = interpolate(q_[ui], V5) 
+            print "Get norm"
             uen = norm(u_e)
-            diff = project(u_e - q_[ui], V5)
-            error = norm(diff) / uen
+            print "Get the diff"
+            num.vector().axpy(-1,  u_e.vector())
+            print "Get norm of diff"
+            error = norm(num) / uen
             error_u[ui].append(error)
 
             print "%s: %s" % (ui, error_u[ui][-1])
 
-            if tstep*dt >= 4:
+            if tstep >= 40:
                #abs(error_u['u0'][-1] - error_u['u0'][-2]) < 1e-9 and \
                #abs(error_u['u1'][-1] - error_u['u1'][-2]) < 1e-9 and \
                #abs(error_u['p'][-1] - error_u['p'][-2]) < 1e-9:
