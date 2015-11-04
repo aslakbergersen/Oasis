@@ -141,12 +141,10 @@ if __name__ == "__main__":
     #    print p, counter
     #    counter += 1
     #write_spheres(points[56: 84])
+    centerline = []
     counter = 0
-    for p in [-0.016, -0.024, 0.016, 0.032, 0.044, 0.06, 0.08, 0.12, 0.16,]:
-        n = 0
-        for k in points:
-            if k[2] == p and k[0] == 0: break
-            n += 1
-        
+    for n in len(points):
+        if points[]
+
         compute_spectra([u_90[n], u_91[n], u_92[n], u_93[n]], points[n], counter)
         counter += 1

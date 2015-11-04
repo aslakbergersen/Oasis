@@ -15,7 +15,7 @@ def get_data():
     # Check all files
     for file in files:
         # Only read files for this case
-        if file.split("_")[-2] == "6500":
+        if file.split("_")[-2] == "3500":
             tmp = open(path.join(results_dir, file), "r")
             tmp = tmp.readlines()
 
@@ -55,7 +55,7 @@ def get_info(lines):
 def mean_confidence_interval(data):
     """Calculate mean confidence interval (MCI)"""
     a = 1.0*np.array(data)
-    n = len(a)
+    n = a.shape[0]
     m, se = np.mean(a), stats.sem(a)
     h = se * stats.t.ppf((1+0.95)/2., n-1)
     return m, h, +h
@@ -87,6 +87,8 @@ def get_variance(map):
     # Different intervals
     x_centerline = [-0.088, -0.064, -0.048, -0.040, -0.016, -0.008, 0, 0.008,
                     0.016, 0.024, 0.032, 0.04, 0.05, 0.06, 0.08]
+    #x_centerline = [-0.088, -0.064, -0.048, -0.02, -0.008, 0, 0.008, 0.016,
+    #        0.024, 0.032, 0.06, 0.08]
     x_r1 = linspace(-0.006+tol, 0.006-tol, 25)
     x_r2 = linspace(-0.002+tol, 0.002-tol, 10)
     x_r3 = linspace(-0.0034+tol, 0.0034-tol, 20)
@@ -144,7 +146,10 @@ def get_data_results(folder_path):
         if path.isfile(path.join(stat_path, file)):
             key = "_".join(file.split("_")[:-1])
             num_ = data["num"]
-            arr = np.load(path.join(stat_path, file)) #/ num_
+            if "senterline" in key:
+                print num_
+                print folder_path, key
+            arr = np.load(path.join(stat_path, file)) #* num_
             data["array"][key] = arr
 
     # Get eval points
@@ -162,7 +167,7 @@ def get_results(latest, folder, compare):
     if latest:
         folders = listdir(folder_path)
         folder = array([int(f) for f in folders]).max()
-    
+
     # Get data from latest or choosen folder
     if compare is None:
         data = get_data_results(path.join(folder_path, str(folder)))
@@ -171,7 +176,7 @@ def get_results(latest, folder, compare):
     else:
         data = {}
         i = 0
-        for folder in compare: 
+        for folder in compare:
             data[i] = get_data_results(path.join(folder_path, folder))
             i += 1
 
@@ -206,7 +211,7 @@ def map_filenames(nozzle_header):
     return nozzle_header, element
 
 
-def make_plots(results, data, filepath, legend):
+def make_plots(results, data, filepath, legend, d):
     """Match experimental data against numerical"""
     color = ["r", "g", "y", "k", "b"]
 
@@ -220,17 +225,55 @@ def make_plots(results, data, filepath, legend):
     for key in data.keys():
         key_re, element = map_filenames(key)
         if key_re is not None and "slice_u_r" not in key_re and "deleted" not in key_re:
-            plt.figure()
-            plt.title(key)
+            plt.figure(figsize=(15, 10))
+            #plt.figure()
+            if "senterline_u" in key_re:
+                plt.title("Time averaged axial velocity at centerline",
+                          fontsize=25)
+            else:
+                plt.title(key)
             u = data[key]
+            u[-1] = [u_ * 1000 for u_ in u[-1]]
+
+            #if "senterline_u" in key_re: ###
+            tmp_u = d[key]["data"]
+            tmp_z = d[key]["punkt"]
+            first = True
+            tmp_x = {}
+
+            for k in tmp_u.keys():
+                for i, p in enumerate(tmp_z[k]):
+                    if not tmp_x.has_key(p):
+                        tmp_x[p] = [tmp_u[k][i]]
+                    else:
+                        tmp_x[p].append(tmp_u[k][i])
+
+                    
+            #for k, v in tmp_x.items():
+            #    u = mean_confidence_interval(v)
+            #    k = [(k*1000).tolist()]
+            #    y = [u[0].tolist()]
+            #    err1 = [u[1].tolist()]
+            #    err2 = [u[2].tolist()]
+            #    if err1[0] + err2[0] > 10 and "pressure" not in key:
+            #        err1 = [0]
+            #        err2 = [0]
+            #    if first:
+            #        plt.errorbar(k, y, yerr=[err1, err2], fmt='bo', label="Data")
+            #        first = False
+            #    else:
+            #        plt.errorbar(k, y, yerr=[err1, err2], fmt='bo')
+            #    plt.hold("on")
             plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data")
             plt.hold("on")
+
             for k in comp_list:
                 if key_re.split("_")[-1] == "p":
                     u = results[k]["array"][key_re]*1056
                 else:
                     u = results[k]["array"][key_re]
-                x = results[k]["points"]["_".join(key_re.split("_")[::2])]
+                # Convert to mm
+                x = results[k]["points"]["_".join(key_re.split("_")[::2])]*1000
                 if "slice" in key_re:
                     x = array([x_[0] for x_ in x])
                 else:
@@ -241,9 +284,16 @@ def make_plots(results, data, filepath, legend):
                 else:
                     plt.plot(x, u[:,0], color=color[k])
             if legend is not None:
-                plt.legend(["Data"] + legend, loc=2)
+                #plt.legend(["Data"] + legend, loc=2)
             else:
                 plt.legend(["Experiments", "Computational"])
+            plt.ylabel(r"$\overline{w}$ [$\frac{m}{s}$]", fontsize=20)
+            plt.xlabel(r"$z$ [mm]", fontsize=20)
+            plt.xlim([-120, 200])
+            #plt.ylim([-0.6, 5.4])
+            plt.plot([-200, 200], [0, 0], color="k")
+            plt.plot([0, 0], [-1, 10], color="k")
+            
             plt.savefig(path.join(filepath, key_re + ".png"))
             #plt.show()
             plt.close()

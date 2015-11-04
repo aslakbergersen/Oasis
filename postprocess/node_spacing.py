@@ -8,7 +8,7 @@ def meshsize(mesh_path):
     DG = FunctionSpace(mesh, "DG", 0)
 
     h = CellVolume(mesh)
-    dl = project(12/math.sqrt(2) * h**(1./3), DG)
+    dl = project((12/math.sqrt(2) * h)**(1./3), DG)
     
     file = File(mesh_path.split(".")[0] + "_nodespacing.pvd")
     file << dl

@@ -91,10 +91,11 @@ def makefolders(filepath):
 def main():
     compare, latest, folder, destination, legend = read_command_line()
     data = get_variance(get_data())
+    d = get_data()
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
     fancy_plot(results, data, filepath, legend)
-    make_plots(results, data, filepath, legend)
+    make_plots(results, data, filepath, legend, d)
     if compare is None:
         vizualize_flux(results, filepath)
     #compute_validation_matrix(results, data, filepath, legend)
