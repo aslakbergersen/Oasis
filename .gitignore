@@ -1,3 +1,9 @@
 *.pyc
 *.png
 .*.swp
+*.vtu
+*.pvd
+*.pvtu
+*.h5
+*.xdmf
+*.pyc
