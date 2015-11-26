@@ -42,8 +42,8 @@ def dolfincode(expr, assign_to=None, **settings):
 
 def find_f():
     x, y, z, t, nu, eps = sp.symbols('x y z t nu eps')
-    u =  (sp.sin(sp.pi*(x+y+z)) + sp.cos(sp.pi*y*z))*t + eps
-    v = (-sp.sin(sp.pi*(x+y))  + sp.cos(sp.pi*x*z))*t + eps
+    u =  0.3*(sp.sin(sp.pi*(x+y+z)) + sp.cos(sp.pi*y*z))*t + eps
+    v = 0.9*(-sp.cos(sp.pi*(x+y+z))  + sp.cos(sp.pi*x*z))*t + eps
     p = (eps * sp.sin(sp.pi*(x + y + z)) * sp.cos((x + y + z)*sp.pi) + eps) * (t + 0.3)
 
     # An exact solution
@@ -54,8 +54,8 @@ def find_f():
     dudx = sp.diff(u,x)
     dvdy = sp.diff(v,y)
     
-    w = -sp.integrate(dudx + dvdy, z) + eps # add something dependent on x and y
-
+    w = -sp.integrate(dudx + dvdy, z) + sp.cos(sp.pi*x*y) + eps # add something dependent on x and y
+    print w
     var = [u, v, w]      # add w if 3D is wanted
 
     # Check if the velocity is divergence free
@@ -76,6 +76,8 @@ def find_f():
 
     # Convert into cpp syntax
     f = (fx, fy) if len(var) == 2 else (fx, fy, fz)
+    print f
+    print "w:", w
     f = dolfincode(f)
     
     # Constants
@@ -101,4 +103,5 @@ def find_f():
     return exact_u, exact_p, u_,  f
 
 if __name__ == "__main__":
-    find_f()
+    u_e, p_e, u_, f = find_f()
+    print f
