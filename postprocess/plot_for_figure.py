@@ -5,23 +5,9 @@ from matplotlib.pyplot import *
 from plot_probes import sort, plot_probes
 
 
-def read_command_line():
-    """Read arguments from commandline"""
-    parser = ArgumentParser()
-
-    # Define arguments
-    parser.add_argument('--path', type=str,
-                        default="../nozzle_results/5M_P1P1/data/5/Stats/Probes",
-                        help="A list of the runs you want to compare", metavar="compare")
-
-    args = parser.parse_args()
-
-    return args.path
-
-
 def plot_u(u, points, leg, t):
     # Get index of chosen points
-    z = ["-0.024", "-0.016", "0.016", "0.032", \
+    z = ["-0.024", "-0.016", "0.0", "0.016", "0.032", \
          "0.044", "0.056", "0.06", "0.08", "0.12", "0.16"]
     p = []
     for i in range(len(points)):
@@ -41,7 +27,7 @@ def plot_u(u, points, leg, t):
 
     # Set with of sampling range
     t_diff = t_max - t_min
-    print t_diff
+    #print t_diff
     if t_diff >= 0.1:
         #t_min = t_max - 0.1
         t_min = 1.0
@@ -72,16 +58,17 @@ def plot_u(u, points, leg, t):
             u_ = u[i][index].T
             u_ = u_[limits[i][0]:limits[i][1]]
 
-            u_mag = np.sqrt(np.sum(u_**2, axis=1))
             u_mean = np.mean(u_, axis=0)
-            u_mean_mag = np.sqrt(np.sum(u_mean**2))
-            to_plot = u_mag - u_mean_mag
-            plot(t_[i], to_plot, label=leg[i])
+            k = 0.5*np.sum((u_ - u_mean)**2, axis=1)
+            #u_mean_mag = np.sqrt(np.sum(u_mean**2))
+            #to_plot = u_mag - u_mean_mag
+            plot(t_[i], k, label=leg[i])
             hold("on")
-        title("Velocity fluctuations at z = %s, x = %s" % (points[index][2], points[index][0]))
-        xlabel(r"$t$ [s]")
-        ylabel(r"$u'(t)$ [$\frac{m}{s}$]")
-        axis([t_min, t_max, -1, 1])
+        title("Turbulent kinetic energy at z = %s, x = %s" % (points[index][2],
+                points[index][0]), fontsize="x-large")
+        xlabel(r"$t$ [s]", fontsize="large")
+        ylabel(r"$k$ [$\frac{m^2}{s^2}$]", fontsize="large")
+        axis([t_min, t_max, 0, 1])
         #legend()
         savefig("spectra/velo_fluct_" + point.replace(" ", "_") + ".png")
         close()
@@ -92,10 +79,11 @@ def plot_u(u, points, leg, t):
             u_mag = np.sqrt(np.sum(u_**2, axis=1))
             plot(t_[i], u_mag, label=leg[i])
             hold("on")
-        title("Velocity magnitude at z = %s, x = %s" % (points[index][2], points[index][0]))
+        title("Velocity magnitude at z = %s, x = %s" % (points[index][2],
+               points[index][0]), fontsize="x-large")
         
-        xlabel(r"$t$ [$s$]")
-        ylabel(r"|$u(t)$| [$\frac{m}{s}$]")
+        xlabel(r"$t$ [$s$]", fontsize="large")
+        ylabel(r"|$u(t)$| [$\frac{m}{s}$]", fontsize="large")
         axis([t_min, t_max, 0, 5])
         #legend()
         savefig("spectra/velo_mag_" + point.replace(" ", "_") + ".png")
@@ -103,7 +91,6 @@ def plot_u(u, points, leg, t):
 
 
 if __name__ == "__main__":
-    folder_path = read_command_line()
     u = []; p = []; t = []
     for folder in ["90", "91", "92", "93"]: #, "94"]:
         print "Loding ...", folder

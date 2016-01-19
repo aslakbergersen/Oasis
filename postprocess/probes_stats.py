@@ -96,7 +96,7 @@ def plot_spectra(u):
 def WritePolyData(input, filename):
     writer = vtk.vtkXMLPolyDataWriter()
     writer.SetFileName(filename)
-    writer.SetInput(input.GetOutput())
+    writer.SetInput(input)
     writer.Write()
 
 def write_spheres(points):
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     centerline = []
     counter = 0
     for n in len(points):
-        if points[]
+        #if points[]
 
         compute_spectra([u_90[n], u_91[n], u_92[n], u_93[n]], points[n], counter)
         counter += 1

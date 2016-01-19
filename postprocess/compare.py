@@ -87,8 +87,13 @@ def get_variance(map):
     # Different intervals
     x_centerline = [-0.088, -0.064, -0.048, -0.040, -0.016, -0.008, 0, 0.008,
                     0.016, 0.024, 0.032, 0.04, 0.05, 0.06, 0.08]
+    pressure_c = [-9.032e-2, -7.696e-2, -6.299e-2, -5.723e-2, -5.149e-2, -4.575e-2,
+                  -4.001e-2, -3.0e-2, -1.999E-2  -1.001E-2  -2.03e-3, 0, 2.03e-3, 8.0e-3,
+                  1.6e-2, 2.4e-2, 3.2e-2]
+    
     #x_centerline = [-0.088, -0.064, -0.048, -0.02, -0.008, 0, 0.008, 0.016,
     #        0.024, 0.032, 0.06, 0.08]
+    
     x_r1 = linspace(-0.006+tol, 0.006-tol, 25)
     x_r2 = linspace(-0.002+tol, 0.002-tol, 10)
     x_r3 = linspace(-0.0034+tol, 0.0034-tol, 20)
@@ -96,7 +101,10 @@ def get_variance(map):
 
     for key, item in map.iteritems():
         # Pick interval for respective location
-        if "plot-z-distribution" in key:
+        if "pressure" in key:
+            print key
+            x = pressure_c
+        elif "plot-z-distribution" in key:
             x = x_centerline
         elif "-0.02000" in key or "-0.00800" in key or "0.00000" in key:
             x = x_r2
@@ -247,7 +255,6 @@ def make_plots(results, data, filepath, legend, d):
                         tmp_x[p] = [tmp_u[k][i]]
                     else:
                         tmp_x[p].append(tmp_u[k][i])
-
                     
             #for k, v in tmp_x.items():
             #    u = mean_confidence_interval(v)
@@ -264,12 +271,13 @@ def make_plots(results, data, filepath, legend, d):
             #    else:
             #        plt.errorbar(k, y, yerr=[err1, err2], fmt='bo')
             #    plt.hold("on")
+
             plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data")
             plt.hold("on")
 
             for k in comp_list:
                 if key_re.split("_")[-1] == "p":
-                    u = results[k]["array"][key_re]*1056
+                    u = results[k]["array"][key_re]*1056 + 1000
                 else:
                     u = results[k]["array"][key_re]
                 # Convert to mm
@@ -284,15 +292,16 @@ def make_plots(results, data, filepath, legend, d):
                 else:
                     plt.plot(x, u[:,0], color=color[k])
             if legend is not None:
-                #plt.legend(["Data"] + legend, loc=2)
+                pass
+                plt.legend(["Data"] + legend, loc=1)
             else:
                 plt.legend(["Experiments", "Computational"])
             plt.ylabel(r"$\overline{w}$ [$\frac{m}{s}$]", fontsize=20)
             plt.xlabel(r"$z$ [mm]", fontsize=20)
-            plt.xlim([-120, 200])
-            #plt.ylim([-0.6, 5.4])
-            plt.plot([-200, 200], [0, 0], color="k")
-            plt.plot([0, 0], [-1, 10], color="k")
+            #plt.xlim([-0.1, 100])
+            #plt.ylim([-0.6, 6])
+            #plt.plot([-200, 200], [0, 0], color="k")
+            #plt.plot([0, 0], [-1, 6], color="k")
             
             plt.savefig(path.join(filepath, key_re + ".png"))
             #plt.show()

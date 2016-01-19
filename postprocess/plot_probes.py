@@ -48,7 +48,6 @@ def fill_data(files, data, size_file, tstep_interval, map):
     s_prev = 0
 
     for file in files:
-        #print file
         a = np.load(file)
         s = size_file if i == 0 else tstep_interval
         if a.shape[0] == data.shape[0]:
