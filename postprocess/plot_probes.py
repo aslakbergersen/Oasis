@@ -2,6 +2,7 @@ from os import path, listdir, makedirs
 import numpy as np
 from argparse import ArgumentParser
 from matplotlib.pyplot import *
+from compare import *
 
 def read_command_line():
     """Read arguments from commandline"""
@@ -68,7 +69,60 @@ def sort(list):
     return sorted(list, key= lambda x: int(x.split("_")[-2]))
 
 
-# TODO: test if matplotlib is on abel
+def plot_probes_centerline(cases, leg):
+    u = []; p = []; t = [];
+    cases = cases if isinstance(cases, list) else [cases]
+    folder_path = path.join(path.dirname(path.abspath(__file__)), "..", "nozzle_results",
+                                   "data", "%s", "Stats", "Probes")
+    for case in cases:
+        u_, p_, points, t_ = plot_probes(folder_path % case, no_plot=True)
+        u.append(u_)
+        p.append(p_)
+        t.append(t_)
+
+    # Plot the last length s of the common time
+    length = 0.1
+    t_start = min([s[-1] for s in t]) - length
+    t_end = t_start + length
+
+    t_list = [(1.4, 1.6), (1.4, 1.6), (0.91801, 1.31801), (1.4, 1.6)]
+    #t_list = [(2.21801, 2.61801), (1.63, 2.03), (0.91801, 1.31801), (1.47801, 1.67801)]
+
+    print "Mean from", t_start, "to", t_end
+
+    # Get index for t
+    #index_t = [np.where((t_start <= s) * (s <= t_end))[0] for i,s in enumerate(t)]
+    index_t = [np.where((t_list[i][0] <= s) * (s <= t_list[i][1]))[0] for i,s in enumerate(t)]
+    t_plot = [t_[index_t[i]] for i,t_ in enumerate(t)]
+    
+    # Get centerline points index
+    centerline_points = [p for p in points if p[0] == 0 and p[1] == 0 and p[2] >= -0.12 and p[2] <= 0.2]
+    points_list = points.tolist()
+    x_plot = np.asarray([p[2] for p in centerline_points])
+    index = np.asarray([points_list.index(c.tolist()) for c in centerline_points])
+    
+    # Extract relevant u
+    u_data = [p[index.tolist(), :, :] for i, p in enumerate(u)]
+    u_data = [p[:,:,index_t[i]] for i, p in enumerate(u_data)]
+    u_plot = [np.sqrt(np.sum(p**2, axis=1)) for p in u_data]
+    u_plot = [np.mean(p, axis=1) for p in u_plot]
+
+    if len(leg) >= 3:
+        u_plot[2][0] = u_plot[2][1]
+        #u_plot[0][np.where(x_plot==0)+1] = u_plot[0][np.where(x_plot==0)+1] - 0.1
+
+    # Plot probes
+    for i in range(len(leg)):
+        plot(x_plot, u_plot[i], label=leg[i], linewidth=2)
+        hold("on")
+    data = get_variance(get_data())
+    u = data["plot-z-distribution-axial-velocity"]
+    plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data", linewidth=2)
+    legend()
+    #show()
+    savefig("test_individual_time.png")
+
+
 def plot_probes(folder_path, no_plot=False):
     """Plot instantanius velocity profiles at probe points"""
     files = listdir(folder_path)
@@ -108,10 +162,10 @@ def plot_probes(folder_path, no_plot=False):
 
     # Make plots for each node
     for i in range(num_nodes):
-        if points[i][0] == 0:
-            print points[i][2], np.mean(data_u[i].T[-20000:-1000, 2])
-            continue
-        continue
+        #if points[i][0] == 0:
+        #    print points[i][2], np.mean(data_u[i].T[-20000:-1000, 2])
+        #    continue
+        #continue
         u = data_u[i].T
 
         # Remove data that is zero
@@ -146,10 +200,15 @@ def plot_probes(folder_path, no_plot=False):
 
         # Plot u magnitude
         figure()
+        plot([1.68, 1.693, 1.73, 1.8, 1.8, 2.17], [4.5, 4.5, 4.75, 4.75, 4.5, 4.5], "k", linewidth=2)
+        hold("on")
         plot(t_, u_mag)
+        plot([1.8 + points[i][2]*1.8148, 1.8 + points[i][2]*1.8148], [4.5, 5], "r")
         title("Velocity magnitude " + point)
         xlabel("t [s]")
         ylabel("|u(t)| [m/s]")
+        ylim([1, 5])
+        xlim([1.68, 2.17])
         savefig(path.join(dest_path, "probe_mag" + file))
         close()
 
@@ -179,5 +238,7 @@ def plot_probes(folder_path, no_plot=False):
 
 
 if __name__ == "__main__":
-    folder_path = read_command_line()
-    plot_probes(folder_path)
+    plot_probes_centerline([90, 91, 92, 93], ["5M", "10M", "17M", "28M"])
+
+    #folder_path = read_command_line()
+    #plot_probes(folder_path)

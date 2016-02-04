@@ -221,7 +221,7 @@ def map_filenames(nozzle_header):
 
 def make_plots(results, data, filepath, legend, d):
     """Match experimental data against numerical"""
-    color = ["r", "g", "y", "k", "b"]
+    color = ["r", "g", "c", "k", "b"]
 
     if 0 in results.keys():
         comp_list = results.keys()
@@ -272,7 +272,8 @@ def make_plots(results, data, filepath, legend, d):
             #        plt.errorbar(k, y, yerr=[err1, err2], fmt='bo')
             #    plt.hold("on")
 
-            plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data")
+            plt.errorbar(u[-1], u[0], yerr=[u[1], u[2]], fmt='o', label="Data",
+                    linewidth=2)
             plt.hold("on")
 
             for k in comp_list:
@@ -288,12 +289,12 @@ def make_plots(results, data, filepath, legend, d):
                     x = array([x_[-1] for x_ in x])
                 if element != 0:
                     u = array([u_[element] for u_ in u])
-                    plt.plot(x, u, color=color[k])
+                    plt.plot(x, u, color=color[k], linewidth=2)
                 else:
-                    plt.plot(x, u[:,0], color=color[k])
+                    plt.plot(x, u[:,0], color=color[k], linewidth=2)
             if legend is not None:
                 pass
-                plt.legend(["Data"] + legend, loc=1)
+                #plt.legend(["Data"] + legend, loc=1)
             else:
                 plt.legend(["Experiments", "Computational"])
             plt.ylabel(r"$\overline{w}$ [$\frac{m}{s}$]", fontsize=20)
