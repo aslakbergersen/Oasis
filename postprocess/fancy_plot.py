@@ -55,11 +55,11 @@ def fancy_plot(results, data, filepath, leg):
 
                 if first:
                     if leg is not None:
-                        tmp, = plot(x, u, color=color[k], label=leg[k])
+                        tmp, = plot(x, u, color=color[k], label=leg[k], linewidth=2)
                     else:
-                        tmp, = plot(x, u, color=color[k], label="CFD")
+                        tmp, = plot(x, u, color=color[k], label="CFD", linewidth=2)
                 else:
-                    tmp, = plot(x, u, color=color[k])
+                    tmp, = plot(x, u, color=color[k], linewidth=2)
 
             first = False
 

@@ -17,7 +17,7 @@ def compute_spectra(u_, point, fs, leg):
         u = np.array(u)
         u_mean = np.mean(u, axis=0)
         #u_prime = np.sqrt(np.sum((u - u_mean)**2, axis=1))
-        u_prime = 0.5*np.sum((u - u_mean)**2, axis=1)
+        u_prime = np.sqrt(np.sum((u - u_mean)**2, axis=1))
 
         #E, f = mlab.psd(u_prime, NFFT=int(u_prime.shape[0] / 8), Fs=fs[i], detrend=mlab.detrend_none,
         #    window=mlab.window_hanning, noverlap=int(u_prime.shape[0] / 16), pad_to=None,
@@ -27,8 +27,8 @@ def compute_spectra(u_, point, fs, leg):
         window = 'hanning'                # hanning window (default)x
         nperseg = int(u_prime.shape[0] / 8) #8192                    # 4 segements (256 default)
         noverlap = None #int(nperseg / 2) # 50% overlap (default)
-        #scaling = 'density'               # density = power spectral density [V**2 / Hz] (default)
-        scaling = 'spectrum'              # spectrum = power spectrum  [V**2]
+        scaling = 'density'               # density = power spectral density [V**2 / Hz] (default)
+        #scaling = 'spectrum'              # spectrum = power spectrum  [V**2]
 
         # Frequency and energy spectra
         f, E = signal.welch(u_prime, fs=fs[i], window=window, nperseg=nperseg, 
@@ -44,7 +44,7 @@ def compute_spectra(u_, point, fs, leg):
 
     title("Power spectral density at z = %s, x = %s" % (point[2], point[0]),
             fontsize="x-large")
-    xlabel(r"$f$ [$\frac{1}{s}$]", fontsize="large")
+    xlabel(r"$f$ [Hz]", fontsize="large")
     ylabel(r"PSD [$\frac{m^2}{s}$]", fontsize="large")
     #legend()
     axis([10, 10000, 1e-14, 1])
