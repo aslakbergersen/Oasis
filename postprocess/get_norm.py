@@ -1,7 +1,8 @@
 from re import *
-from os import path
+from os import path, listdir
 from matplotlib.pyplot import *
 from argparse import ArgumentParser
+import numpy as np
 
 
 def read_command_line():
@@ -16,27 +17,30 @@ def read_command_line():
     return args.f
 
 
-def get_norm(filename):
-    f = open(filename, "r")
-    text = f.read()
-    f.close()
+def get_norm(folder):
+    """Collect data from the computations"""
+    folder_path = path.join(path.dirname(__file__), "..", "nozzle_results", "data")
 
-    # Split on each restart and assume that the entire log is from the same
-    # simulation
-    different_runs = text.split("Starting job")
-
-    # First start include first norm
-    norm = findall(r"Norm:\s(.*)\n", different_runs[0])
-
-    print norm
+    # Find latest run
+    if folder is None:
+        folders = listdir(folder_path)
+        folder = array([int(f) for f in folders]).max()
     
-    # For all other runs skip the first norm comparison as it is so large.
-    print range(1, len(different_runs))
-    for i in range(1, len(different_runs)):
-        tmp_text = different_runs[i]
-        norm += findall(r"Norm:\s(.*)$", tmp_text)[0][1:]
+    logsfolder_path = path.join(folder_path, folder, "logs")
+    logs_path = [path.join(logsfolder_path, f) for f in listdir(logsfolder_path)]
+    s = ""
+    for log in logs_path:
+        f = open(log, "r")
+        s += f.read()
+        f.close()
 
-    t = linspace(0, len(norm)*300, 300)
+    # Get all norms and make "timeline"
+    norm = findall(r"Norm:\s(.*)\n", s)
+    norm = [n for n in norm[3:] if float(n) < 1.]
+    t = np.linspace(0, len(norm)*300, len(norm))
+
+    print(len(norm))
+    print t.shape
 
     plot(t, norm)
     xlabel("Timesteps")
@@ -46,3 +50,4 @@ def get_norm(filename):
 if __name__ == "__main__":
     filename = read_command_line()
     get_norm(filename)
+    savefig(path.join(logsfolder_path, "norm.png"))

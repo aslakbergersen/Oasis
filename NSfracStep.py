@@ -202,7 +202,7 @@ while t < (T - tstep*DOLFIN_EPS) and not stop:
     if tstep % print_intermediate_info == 0:
         info_green('Time = {0:2.4e}, timestep = {1:6d}, End time = {2:2.4e}'.format(t, tstep, T)) 
         info_red('Total computing time on previous {0:d} timesteps = {1:f}'.format(print_intermediate_info, toc()))
-        list_timings(TimingClear_clear, [TimingType_wall])
+        list_timings(True)
         tic()
           
     # AB projection for pressure on next timestep

@@ -58,12 +58,12 @@ def read_command_line():
             makedirs(path.join(folder_path, "..", "Plots", args.d))
 
     if args.f is not None and args.c is not None:
-        print "You cant provide a list of runs to compare and a spesific run"
+        print "You can not provide a list of runs to compare and a spesific run"
         exit(1)
 
     if args.l and args.c is not None and args.f is not None:
         print "If you want latest you can not spesify another folder or files" \
-               + "to compare with"
+               + " to compare with"
         exit(1)
 
     return args.c, args.l, args.f, args.d, args.leg
@@ -91,10 +91,11 @@ def makefolders(filepath):
 def main():
     compare, latest, folder, destination, legend = read_command_line()
     data = get_variance(get_data())
+    d = get_data()
     results = get_results(latest=latest, folder=folder, compare=compare)
     filepath = makefolders(destination)
     fancy_plot(results, data, filepath, legend)
-    make_plots(results, data, filepath, legend)
+    make_plots(results, data, filepath, legend, d)
     if compare is None:
         vizualize_flux(results, filepath)
     plot_probes(filepath, compare, latest, folder, legend)

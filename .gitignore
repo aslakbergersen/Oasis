@@ -1,0 +1,13 @@
+*.pyc
+*.png
+.*.swp
+*.swo
+*.swn
+*.vtu
+*.pvd
+*.pvtu
+*.h5
+*.xdmf
+*.pyc
+*.py~
+*.orig

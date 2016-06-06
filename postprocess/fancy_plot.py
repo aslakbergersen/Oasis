@@ -12,24 +12,24 @@ def fancy_plot(results, data, filepath, leg):
         results = {0: results}
 
     x = [-1, 0, 2, 4, 6, 8, 15, 20]
-    edge = array([-0.002, -0.002, -0.006, -0.006])
+    edge = array([-2, -2, -6, -6])
     edge_x = [-4, 0, 1e-10, 21]
     D = 0.004
     scale = 2
     labels = []
     first = True
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(15,10))
     plot(edge_x, edge, edge_x, -edge, linewidth=3, color='k')
-    ylim((-0.0065, 0.0065))
+    ylim((-6.5, 6.5))
     xlim((-2.5, 21))
     hold("on")
     ax.set_xticks([-2, 0, 2, 4, 6, 8, 15, 20])
 
     # Set attributs to plot
-    title("Aksial hastighet ved flere slicer")
-    xlabel("x/D [-]")
-    ylabel("r [m]")
+    title("Axial velocity at eight slices", fontsize=25)
+    xlabel(r"$\frac{x}{D}$ [-]", fontsize=20)
+    ylabel(r"$y$ [mm]", fontsize=20)
     #p.set_xticks([-1, 0, 2, 8, 15, 20])
     
     color = ["r", "g", "y", "k", "b"]
@@ -41,7 +41,7 @@ def fancy_plot(results, data, filepath, leg):
             u = data[key]
             displacement = float(key_re.split("_")[-1])/D
             x = array(u[0])/scale + displacement
-            u_ = array(u[-1])
+            u_ = array(u[-1])*1000
 
             if first:
                 errorbar(x, u_, xerr=[array(u[1])/scale, array(u[2])/scale], 
@@ -51,18 +51,18 @@ def fancy_plot(results, data, filepath, leg):
                                     fmt="o", color="b")
             for k in comp_list: 
                 x = results[k]["array"][key_re][:,2] / scale + displacement
-                u = results[k]["points"]["_".join(key_re.split("_")[::2])][:,0]
+                u = results[k]["points"]["_".join(key_re.split("_")[::2])][:,0]*1000
 
                 if first:
                     if leg is not None:
-                        tmp, = plot(x, u, color=color[k], label=leg[k])
+                        tmp, = plot(x, u, color=color[k], label=leg[k], linewidth=2)
                     else:
-                        tmp, = plot(x, u, color=color[k], label="CFD")
+                        tmp, = plot(x, u, color=color[k], label="CFD", linewidth=2)
                 else:
-                    tmp, = plot(x, u, color=color[k])
+                    tmp, = plot(x, u, color=color[k], linewidth=2)
 
             first = False
 
-    legend()
+    #legend()
     #show()
     savefig(path.join(filepath, "fancy_plot.png"))
