@@ -27,8 +27,8 @@ NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
                                    'relative_tolerance': 1e-10,
                                    'absolute_tolerance': 1e-10}
 
-def mesh(N, **params):
-    return RectangleMesh(0, 0, 2, 2, N, N)
+def mesh(Nx, Ny, **params):
+    return RectangleMesh(Point(0, 0), Point(2, 2), Nx, Ny)
 
 class PeriodicDomain(SubDomain):
     
