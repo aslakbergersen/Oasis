@@ -8,17 +8,17 @@ from ..NSCoupled import *
 from ..NSCoupled import __all__
 
 def setup(u_, p_, up_, up, u, p, v, q, nu, mesh, c, ct, q_, 
-          scalar_components, Schmidt, fs, **NS_namespace):
+          scalar_components, Schmidt, fs, CG, **NS_namespace):
     """Set up all equations to be solved. Cylindrical coordinates."""
     assert mesh.geometry().dim() == 2
-    r = Expression("x[1]", domain=mesh)
+    r = Expression("x[1]", domain=mesh, element=CG.ufl_element())
     n = FacetNormal(mesh)
     F_nonlinear = inner(dot(grad(u_), u_), v)*r*dx()
     F_linear    = nu*inner(grad(u_), grad(v))*r*dx() + nu*u_[1]*v[1]/r*dx() \
                   - inner(p_, (r*v [1]).dx(1) + r*v [0].dx(0))*dx() \
                   - inner(q , (r*u_[1]).dx(1) + r*u_[0].dx(0))*dx() \
-                  + nu*inner(grad(u_).T, grad(v))*r*dx() \
-                  - nu*inner(dot(grad(u_).T, n), v)*ds()
+                  + nu*inner(grad(u_).T, grad(v))*r*dx() 
+              #   - nu*inner(dot(grad(u_).T, n), v)*ds()
 
     F = F_linear + F_nonlinear
     J_linear    = derivative(F_linear, up_, up)

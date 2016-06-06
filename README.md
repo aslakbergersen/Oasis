@@ -1,5 +1,7 @@
 Oasis
 =====
+[![Build Status](https://travis-ci.org/mikaem/Oasis.svg?branch=master)](https://travis-ci.org/mikaem/Oasis)
+
 <p align="center">
     <img src="https://www.dropbox.com/s/7icm78pggot8brk/channel3D.gif?dl=1" width="360" height="200" alt="Channel flow"/>
 </p>
@@ -34,7 +36,7 @@ Licence
 Oasis is licensed under the GNU GPL, version 3 or (at your option) any
 later version.
 
-Oasis is Copyright (2013-2015) by the authors.
+Oasis is Copyright (2013-2016) by the authors.
 
 Documentation
 -------------
