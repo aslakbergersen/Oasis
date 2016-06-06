@@ -9,6 +9,8 @@ import numpy as np
 import cPickle
 from mpi4py.MPI import COMM_WORLD as comm
 import subprocess
+import os
+from hashlib import sha1
 
 # Values for geometry
 start = -0.12
@@ -22,9 +24,6 @@ flow_rate = {  # From FDA
              6500: 6.77E-5
             }
 inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))'
-#restart_folder = None #"nozzle_results/data/12/Checkpoint"
-#machine_name = subprocess.check_output("hostname", shell=True).split(".")[0]
-#nozzle_path = path.sep + path.join("mn", machine_name, "storage", "aslakwb", "nozzle_results")
 
 # Update parameters from last run
 def update(commandline_kwargs, NS_parameters, **NS_namespace):
@@ -35,6 +34,17 @@ def update(commandline_kwargs, NS_parameters, **NS_namespace):
         NS_parameters.update(cPickle.load(f))
         NS_parameters['T'] = NS_parameters['T'] + 200 * NS_parameters['dt']
         NS_parameters['restart_folder'] = restart_folder
+        NS_parameters['dt'] = commandline_kwargs["dt"]
+        if commandline_kwargs.has_key("checkpoint"):
+	    NS_parameters['checkpoint'] = commandline_kwargs["checkpoint"]
+        # Add noise option to old simulations and read commandline
+        if not NS_parameters.has_key("noise"):
+            NS_parameters['noise'] = False
+        if not NS_parameters.has_key("noise_type"):
+            NS_parameters['noise_type'] = None
+        if commandline_kwargs.has_key("noise"):
+            NS_parameters['noise'] = commandline_kwargs["noise"]
+
         globals().update(NS_parameters)
     else:
         # Override some problem specific parameters
@@ -50,6 +60,8 @@ def update(commandline_kwargs, NS_parameters, **NS_namespace):
                             checkpoint=1000,
                             check_steady=300,
                             eval_t=50,
+                            noise=False,
+                            noise_type=None,
                             plot_t=10,
                             velocity_degree=1,
                             pressure_degree=1,
@@ -81,7 +93,7 @@ def outlet(x, on_boundary):
     return on_boundary and x[2] > stop - eps_mesh
 
 
-def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
+def create_bcs(V, Q, sys_comp, nu, case, mesh, noise, **NS_namespce):
     boundaries = FacetFunction("size_t", mesh)
     boundaries.set_all(0)
     Inlet = AutoSubDomain(inlet)
@@ -96,18 +108,40 @@ def create_bcs(V, Q, sys_comp, nu, case, mesh, **NS_namespce):
     A_in = assemble(Constant(1)*ds(mesh)[boundaries](2))
     A_out = assemble(Constant(1)*ds(mesh)[boundaries](3))
 
+    u = Function(V)
+    u.vector()[:] = 5
+
     r_0 = math.sqrt(A_in / math.pi)
 
-    # Find u_0 for 
+    # Find u_0 for
+    inlet_string = 'u_0 * (1 - (x[0]*x[0] + x[1]*x[1])/(r_0*r_0))' 
     u_0 = flow_rate[case] / A_in * 2  # For parabollic inlet
-    inn = Expression(inlet_string, u_0=u_0, r_0=r_0)
+
+    class InnExpression(Expression):
+        def eval(self, value, x):
+            r = np.random.uniform(0.99, 1.01)
+            value[0] = u_0 * (1 - (x[0]*x[0] + x[1]*x[1]) / (r_0*r_0)) * r
+
+    class Noise(Expression):
+        def eval(self, value, x):
+            value[0] = np.random.normal(0, 0.001)
+
+    inn = Expression(inlet_string, u_0=u_0, r_0=r_0) if not noise else InnExpression()
+    inn2 = Constant(0) if not noise else Noise()
     no_slip = Constant(0)
 
     bcs = dict((ui, []) for ui in sys_comp)
     bc0 = DirichletBC(V, no_slip, walls)
     bc10 = DirichletBC(V, inn, inlet)
-    bc11 = DirichletBC(V, no_slip, inlet)
+    bc11 = DirichletBC(V, inn2, inlet)
     p2 = DirichletBC(Q, no_slip, outlet)
+
+    bc0.apply(u.vector())
+    bc10.apply(u.vector())
+
+    file_ = File("/work/projects/nn9316k/5M_P2P1/u.pvd")
+    file_ << u
+    del file_
 
     bcs['u0'] = [bc0, bc11]
     bcs['u1'] = [bc0, bc11]
@@ -122,7 +156,77 @@ def initialize(q_, restart_folder, mesh_path, **NS_namespace):
         q_['u2'].vector()[:] = 1e-12
 
 
-def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
+class _HDF5Link:
+    """Helper class for creating links in HDF5-files."""
+    cpp_link_module = None
+    def __init__(self):
+        cpp_link_code = '''
+        #include <hdf5.h>
+        void link_dataset(const MPI_Comm comm,
+                          const std::string hdf5_filename,
+                          const std::string link_from,
+                          const std::string link_to, bool use_mpiio)
+        {
+            hid_t hdf5_file_id = HDF5Interface::open_file(comm, hdf5_filename, "a", use_mpiio);
+            herr_t status = H5Lcreate_hard(hdf5_file_id, link_from.c_str(), H5L_SAME_LOC,
+                                link_to.c_str(), H5P_DEFAULT, H5P_DEFAULT);
+            dolfin_assert(status != HDF5_FAIL);
+
+            HDF5Interface::close_file(hdf5_file_id);
+        }
+        '''
+
+        self.cpp_link_module = compile_extension_module(cpp_link_code, additional_system_headers=["dolfin/io/HDF5Interface.h"])
+
+    def link(self, hdf5filename, link_from, link_to):
+        "Create link in hdf5file."
+        use_mpiio = MPI.size(mpi_comm_world()) > 1
+        self.cpp_link_module.link_dataset(mpi_comm_world(), hdf5filename, link_from, link_to, use_mpiio)
+
+
+
+def save_hdf5(fullname, field_name, data, timestep, hdf5_link):
+        # Create "good enough" hash. This is done to avoid data corruption when restarted from
+        # different number of processes, different distribution or different function space
+        local_hash = sha1()
+        local_hash.update(str(data.function_space().mesh().num_cells()))
+        local_hash.update(str(data.function_space().ufl_element()))
+        local_hash.update(str(data.function_space().dim()))
+        local_hash.update(str(MPI.size(mpi_comm_world())))
+
+        # Global hash (same on all processes), 10 digits long
+        global_hash = MPI.sum(mpi_comm_world(), int(local_hash.hexdigest(), 16))
+        global_hash = str(int(global_hash%1e10)).zfill(10)
+
+        # Open HDF5File
+        if not os.path.isfile(fullname):
+            datafile = HDF5File(mpi_comm_world(), fullname, 'w')
+        else:
+            datafile = HDF5File(mpi_comm_world(), fullname, 'a')
+
+        # Write to hash-dataset if not yet done
+        if not datafile.has_dataset(global_hash) or not datafile.has_dataset(global_hash+"/"+field_name):
+            datafile.write(data, str(global_hash)+"/"+field_name)
+
+        if not datafile.has_dataset("Mesh"):
+            datafile.write(data.function_space().mesh(), "Mesh")
+
+        # Write vector to file
+        datafile.write(data.vector(), field_name+str(timestep)+"/vector")
+
+        # HDF5File.close is broken in 1.4, but fixed in dev.
+        if dolfin_version() != "1.4.0":
+            datafile.close()
+        del datafile
+
+        # Link information about function space from hash-dataset
+        hdf5filename = str(global_hash)+"/"+field_name+"/%s"
+        field_name_current = "%s%s" % (field_name, str(timestep)) +"/%s"
+        for l in ["x_cell_dofs", "cell_dofs", "cells"]:
+            hdf5_link(fullname, hdf5filename % l, field_name_current % l)
+
+
+def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V, folder,
                    mu, case, newfolder, mesh_path, tstep, **NS_namesepace):
 
     MPI.barrier(mpi_comm_world())
@@ -201,7 +305,7 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     eval_wall.dump(path.join(newfolder, "Stats", "Points", "wall"))
 
     # Make probe points
-    probe_list = [-25] + range(-15, 0, 2) + range(16) + [20, 30, 40]
+    probe_list = [-30, -25] + range(-20, 0, 2) + range(46) + range(50, 100, 2)
     probe_points = []
     for j in range(2, -3, -1):
     	probe_points += [[r_1*j, 0, r_1*2*i] for i in probe_list]
@@ -245,15 +349,6 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             if MPI.rank(mpi_comm_world()) == 0:
                 print "WARNING: The stats folder is empty and the stats is not restarted"
 
-        # Restart mean velocity
-        files = listdir(path.join(newfolder, "VTK"))
-        files = [path.join(newfolder, "VTK", f) for f in files if "u_mean_num" in f]
-        if files != []:
-            file = sorted(files, key= lambda x: int(x.split("_")[2][3:]))[0]
-            u_mean["num"] = int(file.split("_")[2][3:])
-            tmp = Function(Vv, file)
-            u_mean["u"].vector().axpy(u_mean["num"], tmp.vector()) 
-
     def norm_l(u, l=2):
         if l == "max":
             return np.max(abs(u.flatten()))
@@ -261,8 +356,9 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
             return np.sum(u**l)**(1./l)
 
     # Files to store plot
-    file_u = path.join(newfolder, "VTK", "velocity%06.0f.xml.gz")
-    file_p = path.join(newfolder, "VTK", "pressure%06.0f.xml.gz")
+    hdf5_link = _HDF5Link().link
+    file_u = path.join("/work", "projects", "nn9316k", folder, "VTK", "u.h5")
+    file_p = path.join("/work", "projects", "nn9316k", folder ,"VTK", "p.h5")
     files = {"u": file_u, "p": file_p}
 
     # For flux evaluation in inlet, outlet and walls
@@ -278,14 +374,14 @@ def pre_solve_hook(velocity_degree, mesh, dt, pressure_degree, V,
     # For stopping criteria
     prev = [zeros((N, 3))]
 
-    return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, prev=prev,
+    return dict(Vv=Vv, Pv=Pv, DG=DG, z=z, files=files, prev=prev, hdf5_link=hdf5_link,
                 norm_l=norm_l, eval_dict=eval_dict, normal=normal, domains=domains, 
                 uv=uv, u_mean=u_mean)
 
 
 def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dict, 
                   norm_l, nu, z, rho, DG, eval_t, files, T, folder, prev, u_mean,
-                  normal, dt, domains, plot_t, checkpoint, uv, **NS_namespace):
+                  normal, dt, domains, plot_t, checkpoint, uv, hdf5_link, **NS_namespace):
     # Print timestep
     if tstep % eval_t == 0:
         if MPI.rank(mpi_comm_world()) == 0:
@@ -310,20 +406,16 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
         # Evaluate points
         [assign(uv.sub(i), u_[i]) for i in range(mesh.geometry().dim())]
         evaluate_points(eval_dict, {"u": u_, "p": p_}, uv)
-        u_mean["u"].vector()[:] += uv.vector()
-        u_mean["num"] += 1 
 
         if tstep % plot_t == 0:
             uv.rename("u", "velocity")
             p_.rename("p", "pressure")
 
             # Store vtk files for post process in paraview 
-            t_ = T * tstep
             components = {"u": uv, "p": p_}
             for key in components.keys():
-	        file = File(files[key] % tstep)
-                file << components[key], t_
-
+                field_name = "velocity" if key == "u" else "pressure"
+                save_hdf5(files[key], field_name, components[key], tstep, hdf5_link)
         
         if tstep % check_steady == 0:
             # Check the max norm of the difference
@@ -355,18 +447,6 @@ def temporal_hook(u_, p_, newfolder, mesh, check_steady, Vv, Pv, tstep, eval_dic
 
         if tstep % checkpoint == 0 and not eval_dict.has_key("initial_u"):
             dump_stats(eval_dict, newfolder, dt, tstep)
-            dump_mean(u_mean, newfolder, tstep, dt, Vv)
-
-
-def dump_mean(u_mean, newfolder, tstep, dt, Vv):
-     filepath = path.join(newfolder, "VTK")
-
-     # Back up u_mean
-     file = File(path.join(filepath, "u_mean_num%s_tstep%s_dt%s.xml.gz" % \
-                                              (u_mean["num"], tstep, dt)))
-     tmp = Function(Vv)
-     tmp.vector().axpy(1. / u_mean["num"], u_mean["u"].vector())
-     file << tmp
 
 
 def dump_stats(eval_dict, newfolder, dt, tstep):

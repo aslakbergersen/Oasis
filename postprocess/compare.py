@@ -8,7 +8,7 @@ from math import sqrt
 
 def get_data():
     """Collect information from the experiments"""
-    results_dir = "/home/aslak/master/src/nozzle"
+    results_dir = "/usit/abel/u1/aslakwb/nobackup/nozzle"
     files = listdir(results_dir)
     map = {}
 
