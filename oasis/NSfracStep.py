@@ -30,17 +30,17 @@ Each new problem needs to implement a new problem module to be placed in
 the problems/NSfracStep folder. From the problems module one needs to import
 a mesh and a control dictionary called NS_parameters. See
 problems/NSfracStep/__init__.py for all possible parameters.
-
 """
+
 import importlib
-from oasis.common import *
+from common import *
 
 commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('oasis.problems.NSfracStep', problemname)))
+    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -55,7 +55,7 @@ problem_parameters(**vars())
 vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
-solver = importlib.import_module('.'.join(('oasis.solvers.NSfracStep', solver)))
+solver = importlib.import_module('.'.join(('solvers.NSfracStep', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for
@@ -73,6 +73,8 @@ V = Q = FunctionSpace(mesh, 'CG', velocity_degree,
 if velocity_degree != pressure_degree:
     Q = FunctionSpace(mesh, 'CG', pressure_degree,
                       constrained_domain=constrained_domain)
+W = VectorFunctionSpace(mesh, 'CG', 1,
+                        constrained_domain=constrained_domain)
 
 u = TrialFunction(V)
 v = TestFunction(V)
@@ -82,19 +84,31 @@ q = TestFunction(Q)
 # Use dictionary to hold all FunctionSpaces
 VV = dict((ui, V) for ui in uc_comp)
 VV['p'] = Q
+VV["d"] = W
 
 # Create dictionaries for the solutions at three timesteps
-q_  = dict((ui, Function(VV[ui], name=ui)) for ui in sys_comp)
+q_ = dict((ui, Function(VV[ui], name=ui)) for ui in sys_comp)
 q_1 = dict((ui, Function(VV[ui], name=ui + "_1")) for ui in sys_comp)
 q_2 = dict((ui, Function(V, name=ui + "_2")) for ui in u_components)
+
+# Hold the wall motion
+#d_p1 = dict((ui, Function(W, name=ui)) for ui in u_components)
+#d_m1 = dict((ui, Function(W, name=ui)) for ui in u_components)
+d_ = Function(W, name="deformation") #dict((ui, Function(W, name=ui)) for ui in u_components)
+d_1 = Function(W)
+move = Function(W)
+w_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 
 # Read in previous solution if restarting
 init_from_restart(**vars())
 
 # Create vectors of the segregated velocity components
-u_  = as_vector([q_ [ui] for ui in u_components]) # Velocity vector at t
-u_1 = as_vector([q_1[ui] for ui in u_components]) # Velocity vector at t - dt
-u_2 = as_vector([q_2[ui] for ui in u_components]) # Velocity vector at t - 2*dt
+u_ = as_vector([q_[ui] for ui in u_components])    # Velocity vector at t
+u_1 = as_vector([q_1[ui] for ui in u_components])  # Velocity vector at t - dt
+u_2 = as_vector([q_2[ui] for ui in u_components])  # Velocity vector at t - 2*dt
+#du_ = as_vector([d_[ui] for ui in u_components])
+wu_ = as_vector([w_[ui] for ui in u_components])
+
 
 # Adams Bashforth projection of velocity at t - dt/2
 U_AB = 1.5 * u_1 - 0.5 * u_2
@@ -123,15 +137,14 @@ bcs = create_bcs(**vars())
 
 # LES setup
 #exec("from oasis.solvers.NSfracStep.LES.{} import *".format(les_model))
-lesmodel = importlib.import_module('.'.join(('oasis.solvers.NSfracStep.LES', les_model)))
+lesmodel = importlib.import_module('.'.join(('solvers.NSfracStep.LES', les_model)))
 vars().update({name:lesmodel.__dict__[name] for name in lesmodel.__all__})
-
 vars().update(les_setup(**vars()))
 
 # Initialize solution
 initialize(**vars())
 
-#  Fetch linear algebra solvers
+# Fetch linear algebra solvers
 u_sol, p_sol, c_sol = get_solvers(**vars())
 
 # Get constant body forces
@@ -151,7 +164,7 @@ vars().update(setup(**vars()))
 # Anything problem specific
 vars().update(pre_solve_hook(**vars()))
 
-tic()
+#tic()
 stop = False
 total_timer = OasisTimer("Start simulations", True)
 while t < (T - tstep * DOLFIN_EPS) and not stop:
@@ -160,6 +173,7 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     inner_iter = 0
     udiff = array([1e8])  # Norm of velocity change over last inner iter
     num_iter = max(iters_on_first_timestep, max_iter) if tstep == 1 else max_iter
+    update_prescribed_motion(**vars())
 
     start_timestep_hook(**vars())
     b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
@@ -219,25 +233,34 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
 
     # Print some information
     if tstep % print_intermediate_info == 0:
-        info_green( 'Time = {0:2.4e}, timestep = {1:6d}, End time = {2:2.4e}'.format(t, tstep, T))
-        info_red('Total computing time on previous {0:d} timesteps = {1:f}'.format(
-            print_intermediate_info, toc()))
-        list_timings(TimingClear_clear, [TimingType_wall])
-        tic()
+        info_green('Time = {0:2.4e}, timestep = {1:6d}, End time = {2:2.4e}'.format(t, tstep, T))
+        #info_red('Total computing time on previous {0:d} timesteps = {1:f}'.format(
+        #    print_intermediate_info, toc()))
+        #list_timings(TimingClear_clear, [TimingType_wall])
+        #tic()
 
     # AB projection for pressure on next timestep
     if AB_projection_pressure and t < (T - tstep * DOLFIN_EPS) and not stop:
         x_['p'].axpy(0.5, dp_.vector())
 
+    # Compute deformation increment
+    move.vector().zero()
+    move.vector().axpy(1, d_.vector())
+    move.vector().axpy(-1, d_1.vector())
+
+    # Move mesh
+    ALE.move(mesh, move)
+    mesh.bounding_box_tree().build(mesh)
+
 total_timer.stop()
-list_timings(TimingClear_keep, [TimingType_wall])
+#list_timings(TimingClear_keep, [TimingType_wall])
 info_red('Total computing time = {0:f}'.format(total_timer.elapsed()[0]))
 oasis_memory('Final memory use ')
-total_initial_dolfin_memory = MPI.sum(mpi_comm_world(), initial_memory_use)
-info_red('Memory use for importing dolfin = {} MB (RSS)'.format(
-    total_initial_dolfin_memory))
-info_red('Total memory use of solver = ' +
-         str(oasis_memory.memory - total_initial_dolfin_memory) + " MB (RSS)")
+#total_initial_dolfin_memory = MPI.sum(mpi_comm_world(), initial_memory_use)
+#info_red('Memory use for importing dolfin = {} MB (RSS)'.format(
+#    total_initial_dolfin_memory))
+#info_red('Total memory use of solver = ' +
+#         str(oasis_memory.memory - total_initial_dolfin_memory) + " MB (RSS)")
 
 # Final hook
 theend_hook(**vars())

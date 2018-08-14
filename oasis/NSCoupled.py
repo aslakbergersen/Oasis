@@ -4,7 +4,7 @@ __copyright__ = 'Copyright (C) 2014 ' + __author__
 __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 import importlib
-from oasis.common import *
+from common import *
 
 """
 This module implements a generic steady state coupled solver for the
@@ -167,10 +167,9 @@ def iterate_scalar(iters=max_iter, errors=max_error):
                 scalar_hook(**globals())
                 scalar_solve(**globals())
                 err[ci] = b[ci].norm('l2')
-                if MPI.rank(mpi_comm_world()) == 0:
+                if MPI.rank(MPI.comm_world) == 0:
                     print('Iter {}, Error {} = {}'.format(citer, ci, err[ci]))
                 citer += 1
-
 
 
 timer = OasisTimer('Start Newton iterations flow', True)
@@ -195,14 +194,14 @@ if len(scalar_components) > 0:
     iterate_scalar()
     scalar_timer.stop()
 
-list_timings(TimingClear_clear, [TimingType_wall])
+#list_timings(TimingClear_clear, [TimingType_wall])
 info_red('Total computing time = {0:f}'.format(timer.elapsed()[0]))
-oasis_memory('Final memory use ')
-total_initial_dolfin_memory = MPI.sum(mpi_comm_world(), initial_memory_use)
-info_red('Memory use for importing dolfin = {} MB (RSS)'.format(
-    total_initial_dolfin_memory))
-info_red('Total memory use of solver = ' +
-            str(oasis_memory.memory - total_initial_dolfin_memory) + ' MB (RSS)')
+#oasis_memory('Final memory use ')
+#total_initial_dolfin_memory = MPI.sum(MPI.comm_world, initial_memory_use)
+#info_red('Memory use for importing dolfin = {} MB (RSS)'.format(
+#    total_initial_dolfin_memory))
+#info_red('Total memory use of solver = ' +
+#            str(oasis_memory.memory - total_initial_dolfin_memory) + ' MB (RSS)')
 
 # Final hook
 theend_hook(**vars())

@@ -3,7 +3,7 @@ __date__ = "2014-04-09"
 __copyright__ = "Copyright (C) 2014 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
-from oasis.problems import *
+from problems import *
 
 # Default parameters NSfracStep solver
 NS_parameters.update(
@@ -99,4 +99,8 @@ def start_timestep_hook(**NS_namespace):
 
 def temporal_hook(**NS_namespace):
     """Called at end of a timestep."""
+    pass
+
+def update_prescribed_motion(**NS_namespace):
+    """ Test"""
     pass

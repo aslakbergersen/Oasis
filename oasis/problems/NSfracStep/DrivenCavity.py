@@ -6,7 +6,7 @@ __license__ = "GNU Lesser GPL version 3 or any later version"
 from ..NSfracStep import *
 from ..DrivenCavity import *
 
-#set_log_active(False)
+set_log_level(99)
 
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, scalar_components, Schmidt, **NS_namespace):
@@ -16,7 +16,7 @@ def problem_parameters(NS_parameters, scalar_components, Schmidt, **NS_namespace
         dt=0.001,
         folder="drivencavity_results",
         plot_interval=20,
-        save_step=10000,
+        save_step=10,
         checkpoint=10000,
         print_intermediate_info=100,
         use_krylov_solvers=True)
@@ -73,7 +73,7 @@ def theend_hook(u_, p_, uv, mesh, testing, **NS_namespace):
         plot(p_, title='Pressure')
 
     u_norm = norm(u_[0].vector())
-    if MPI.rank(mpi_comm_world()) == 0 and testing:
+    if MPI.rank(MPI.comm_world) == 0 and testing:
         print("Velocity norm = {0:2.6e}".format(u_norm))
 
     if not testing:

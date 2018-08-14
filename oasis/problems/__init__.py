@@ -31,13 +31,15 @@ def getMemoryUsage(rss=True):
 parameters["linear_algebra_backend"] = "PETSc"
 parameters["form_compiler"]["optimize"] = True
 parameters["form_compiler"]["cpp_optimize"] = True
-parameters["form_compiler"]["representation"] = "quadrature"
+#parameters["form_compiler"]["representation"] = "quadrature"
 #parameters["form_compiler"]["quadrature_degree"] = 4
 #parameters["form_compiler"]["cache_dir"] = "instant"
 parameters["form_compiler"]["cpp_optimize_flags"] = "-O3"
 #parameters["mesh_partitioner"] = "ParMETIS"
 #parameters["form_compiler"].add("no_ferari", True)
-set_log_active(False)
+#set_log_active(False)
+#set_log_active(False)
+set_log_level(False)
 
 # Default parameters for all solvers
 NS_parameters = dict(
@@ -71,17 +73,17 @@ GREEN = "\033[1;37;32m%s\033[0m"
 
 
 def info_blue(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
+    if MPI.rank(MPI.comm_world) == 0 and check:
         print(BLUE % s)
 
 
 def info_green(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
+    if MPI.rank(MPI.comm_world) == 0 and check:
         print(GREEN % s)
 
 
 def info_red(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
+    if MPI.rank(MPI.comm_world) == 0 and check:
         print(RED % s)
 
 
@@ -100,9 +102,9 @@ class OasisMemoryUsage:
     def __call__(self, s, verbose=False):
         self.prev = self.memory
         self.prev_vm = self.memory_vm
-        self.memory = MPI.sum(mpi_comm_world(), getMemoryUsage())
-        self.memory_vm = MPI.sum(mpi_comm_world(), getMemoryUsage(False))
-        if MPI.rank(mpi_comm_world()) == 0 and verbose:
+        self.memory = MPI.sum(MPI.comm_world, getMemoryUsage())
+        self.memory_vm = MPI.sum(MPI.comm_world, getMemoryUsage(False))
+        if MPI.rank(MPI.comm_world) == 0 and verbose:
             info_blue('{0:26s}  {1:10d} MB {2:10d} MB {3:10d} MB {4:10d} MB'.format(s,
                         int(self.memory - self.prev), int(self.memory),
                         int(self.memory_vm - self.prev_vm), int(self.memory_vm)))
@@ -147,7 +149,7 @@ def recursive_update(dst, src):
 def add_function_to_tstepfiles(function, newfolder, tstepfiles, tstep):
     name = function.name()
     tstepfolder = path.join(newfolder, "Timeseries")
-    tstepfiles[name] = XDMFFile(mpi_comm_world(),
+    tstepfiles[name] = XDMFFile(MPI.comm_world,
                                 path.join(tstepfolder,
                                           '{}_from_tstep_{}.xdmf'.format(name, tstep)))
     tstepfiles[name].function = function
