@@ -62,9 +62,11 @@ def velocity_tentative_solve(ui, F, q_, bcs, x_, b_tmp, udiff, **NS_namespace):
     """Linear algebra solve of tentative velocity component."""
     b_tmp[ui][:] = x_[ui]
     A, L = system(F[ui])
-    import pdb; pdb.set_trace()
     solve(A == L, q_[ui], bcs[ui])
+    #tmp_solver = 
+
     udiff[0] += norm(b_tmp[ui] - x_[ui])
+
 
 
 def pressure_solve(Fp, p_, bcs, dp_, x_, u_, q_, Q, **NS_namespace):
