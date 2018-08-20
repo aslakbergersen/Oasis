@@ -9,13 +9,12 @@ class test(UserExpression):
         self.dummy = dummy
         self.dummy1 = dummy1
         super().__init__(**kwargs)
-
     def eval(self, value, x):
         value[:] = x[0]
 
 # Param
-dt = 0.01
-N = 200
+dt = 0.1
+N = 29
 
 # Mesh
 #m = UnitSquareMesh(20, 20)
@@ -49,7 +48,7 @@ boundaries.set_all(0)
 left.mark(boundaries, 1)
 right.mark(boundaries, 2)
 
-left_ex = Expression(("t", 0), t=0, element=V.ufl_element())
+left_ex = Expression(("dt", 0), dt=dt, element=V.ufl_element())
 
 left_bc = DirichletBC(V, left_ex, boundaries, 1)
 right_bc = DirichletBC(V, Constant((0, 0)), boundaries, 2)
@@ -64,7 +63,9 @@ viz_d.parameters["flush_output"] = True
 # Output from list_krylov_solver_methods()
 solvers = ["bicgstab", "cg", "default", "gmres", "tfqmr",
            "built-in"]
-solvers = ["built-in"]
+#solvers = ["built-in"]
+solvers = ["cg"]
+
 
 # Not converging
 # minres
@@ -72,6 +73,8 @@ solvers = ["built-in"]
 
 # Output from list_krylov_solver_preconditioners()
 precons = ["amg", "default", "hypre_amg", "icc", "ilu", "jacobi", "none", "petsc_amg", "sor"]
+precons = ["amg"]
+
 # Not working:
 # hypre_euclid
 # hypre_parasails
@@ -93,7 +96,7 @@ for solver in solvers:
 
             krylov_param = dict(monitor_convergence=False,report=False,
                                 error_on_nonconvergence=False, nonzero_initial_guess=True,
-                                maximum_iterations=200, relative_tolerance=1e-9,
+                                maximum_iterations=1000, relative_tolerance=1e-9,
                                 absolute_tolerance=1e-9)
 
             mesh_sol.parameters.update(krylov_param)
@@ -101,11 +104,12 @@ for solver in solvers:
         # Time-loop
         times = []
         for i in range(N):
-            left_ex.t = i*dt
+
+            #left_ex.t = i*dt
 
             # Read deformation
-            d_1.vector().zero()
-            d_1.vector().axpy(1, d_.vector())
+            #d_1.vector().zero()
+            #d_1.vector().axpy(1, d_.vector())
 
             # Solve for d and w
 
@@ -128,7 +132,7 @@ for solver in solvers:
 
             move.vector().zero()
             move.vector().axpy(1, d_.vector())
-            move.vector().axpy(-1, d_1.vector())
+            #move.vector().axpy(-1, d_1.vector())
             ALE.move(m, move)
 
             m.bounding_box_tree().build(m)
