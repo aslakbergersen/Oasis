@@ -74,6 +74,9 @@ if velocity_degree != pressure_degree:
     Q = FunctionSpace(mesh, 'CG', pressure_degree,
                       constrained_domain=constrained_domain)
 
+W = VectorFunctionSpace(mesh, 'CG', velocity_degree,
+                        constrained_domain=constrained_domain)
+
 u = TrialFunction(V)
 v = TestFunction(V)
 p = TrialFunction(Q)

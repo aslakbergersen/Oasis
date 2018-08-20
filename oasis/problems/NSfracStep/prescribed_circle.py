@@ -33,7 +33,7 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
             nu = nu,
             T  = T,
             dt = dt,
-            N  = 50,
+            N  = 20,
             R1 = 5,
             R0 = 1,
             #mesh_path = "mesh/box.xml",
