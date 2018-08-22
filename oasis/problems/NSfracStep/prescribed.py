@@ -83,7 +83,7 @@ def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder, NS_expressions
     return bcs
 
 
-def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, **NS_namespace):
+def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, **NS_namespace):
     """Called prior to time loop"""
     viz_d = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "deformation.xdmf"))
     viz_u = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "velocity.xdmf"))
@@ -94,7 +94,7 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, **NS_namespace):
         viz.parameters["rewrite_function_mesh"] = True
         viz.parameters["flush_output"] = True
 
-    Vv = VectorFunctionSpace(mesh, "CG", 1)
+    Vv = VectorFunctionSpace(mesh, "CG", velocity_degree)
     u_vec = Function(Vv, name="u")
 
     # Set up mesh solver
@@ -126,7 +126,7 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, **NS_namespace):
 
     mesh_prec = PETScPreconditioner("ilu")  # in tests sor are faster .. 
     mesh_sol = PETScKrylovSolver("gmres", mesh_prec)
-    w_vec = Function(Vv)
+    w_vec = Function(W)
 
     krylov_solvers = dict(monitor_convergence=False,
                           report=False,
