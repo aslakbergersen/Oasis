@@ -245,8 +245,8 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
 
     # Compute deformation increment
     move.vector().zero()
-    move.vector().axpy(dt, d_.vector())
-    #move.vector().axpy(-1*dt, d_1.vector())
+    move.vector().axpy(1, d_.vector())
+    #move.vector().axpy(-1, d_1.vector())
 
     # Move mesh
     ALE.move(mesh, move)
