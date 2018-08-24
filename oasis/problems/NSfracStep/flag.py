@@ -24,15 +24,14 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
         globals().update(NS_parameters)
 
     else:
-        T = 20
-        N = 1000
+        T = 50
         dt = 0.025
         nu = 0.01
         NS_parameters.update(
             checkpoint = 1000,
-            save_step = 10,
-            check_flux = 2,
+            save_step = 10e10,
             print_intermediate_info = 1000,
+            # Geometrical parameters
             H = 12,
             L = 23,
             b_dist = 4.5,
@@ -42,7 +41,6 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
             f_h = 0.06,
             nu = nu,
             T = T,
-            N = N,
             dt = dt,
             velocity_degree = 1,
             folder = "flag_results",
@@ -53,8 +51,7 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
 
 
 def mesh(mesh_path, lc, H, L, b_dist, b_h, b_l, f_l, f_h, **NS_namespace):
-    # Inspired from
-    # https://gist.github.com/michalhabera/bbe8a17f788192e53fd758a67cbf3bed
+    # Initialize geometry
     geom = pygmsh.built_in.geometry.Geometry()
 
     # Surounding box
@@ -165,7 +162,7 @@ class Flag_x(UserExpression):
 
     def eval(self, values, x):
         tetha = self.angle(x)
-        values[:] = [self.A * (x[0] - 5.5)**2 * np.tan(tetha) * x[1] * np.sin(tetha)]
+        values[:] = [self.A * (x[0] - 5.5)**2 * np.tan(tetha) - x[1] * np.sin(tetha)]
 
 
 class Flag_vec(UserExpression):
@@ -181,7 +178,6 @@ class Flag_vec(UserExpression):
         #values[0] = self.flag_x.external_eval(x)[0]
         values[1] = self.flag_y.external_eval(x)[0]
 
-#TODO: Restart from t = 2?
 
 def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
                NS_expressions, tstep, dt, H, f_h, b_h, L, b_dist, b_l, **NS_namespace):
@@ -255,13 +251,21 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt,
     rigid.mark(boundary, 2)
 
     Vv = VectorFunctionSpace(mesh, "CG", velocity_degree)
+    DG = FunctionSpace(mesh, "DG", velocity_degree)
     u_vec = Function(Vv, name="u")
 
     # Set up mesh solver
     u_mesh, v_mesh = TrialFunction(W), TestFunction(W)
     f_mesh = Function(W)
 
-    F_mesh = ((1 / det(Identity(len(d_)) + grad(d_))) * inner(grad(u_mesh), grad(v_mesh))*dx
+    A = CellDiameter(mesh)
+    D = project(A, DG)
+    D_arr = D.vector().get_local()
+
+    # Note: Double check if alfa changes when mesh moves. I do not think so as long as
+    # project is here and not inside time loop
+    alfa = Constant(D_arr.max()**3 - D_arr.min()**3) / D**3
+    F_mesh = (alfa * inner(grad(u_mesh), grad(v_mesh))*dx
               + inner(f_mesh, v_mesh)*dx)
     a_mesh = lhs(F_mesh)
     l_mesh = rhs(F_mesh)
@@ -296,8 +300,8 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt,
 
 
 def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, F_mesh,
-                             bc_mesh, w_vec, NS_expressions,
-                             a_mesh, l_mesh, A_mesh, L_mesh,
+                             bc_mesh, w_vec, NS_expressions, move,
+                             a_mesh, l_mesh, A_mesh, L_mesh, mesh mesh,t,
                              **NS_namespace):
     # Update time
     for key, value in NS_expressions.items():
@@ -306,7 +310,7 @@ def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, 
 
     # Read deformation
     d_1.vector().zero()
-    #d_1.vector().axpy(1, d_.vector())
+    d_1.vector().axpy(1, d_.vector())
 
     # Solve for d and w
     assemble(a_mesh, tensor=A_mesh)
@@ -318,12 +322,21 @@ def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, 
     mesh_sol.solve(A_mesh, d_.vector(), L_mesh)
 
     w_vec.vector().zero()
-    w_vec.vector().axpy(1, d_.vector())
-    #w_vec.vector().axpy(-1, d_1.vector())
+    w_vec.vector().axpy(1/dt, d_.vector())
+    w_vec.vector().axpy(-1/dt, d_1.vector())
 
     # Read velocity
     for i, ui in enumerate(u_components):
         assign(w_[ui], w_vec.sub(i))
+
+    # Compute deformation increment
+    move.vector().zero()
+    move.vector().axpy(1, d_.vector())
+    move.vector().axpy(-1, d_1.vector())
+
+    # Move mesh
+    ALE.move(mesh, move)
+    mesh.bounding_box_tree().build(mesh)
 
 
 def temporal_hook(t, d_, w_, q_, f, tstep, viz_u, viz_d, viz_p, u_components,
@@ -337,5 +350,7 @@ def temporal_hook(t, d_, w_, q_, f, tstep, viz_u, viz_d, viz_p, u_components,
     viz_w.write(w_["u0"], t)
     viz_w.write(w_["u1"], t)
 
-    if tstep % 10 == 0:
-        print("Time:", round(t,3))
+    print(round(t, 4) , u_vec((12, 6, 0))) # #, file="output_flag.txt")
+
+    #if tstep % 10 == 0:
+    #    print("Time:", round(t,3))

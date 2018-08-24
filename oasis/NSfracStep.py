@@ -34,6 +34,7 @@ problems/NSfracStep/__init__.py for all possible parameters.
 
 import importlib
 from common import *
+import time
 
 commandline_kwargs = parse_command_line()
 
@@ -173,12 +174,14 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     inner_iter = 0
     udiff = array([1e8])  # Norm of velocity change over last inner iter
     num_iter = max(iters_on_first_timestep, max_iter) if tstep == 1 else max_iter
+
     update_prescribed_motion(**vars())
 
     start_timestep_hook(**vars())
     b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
 
     while udiff[0] > max_error and inner_iter < num_iter:
+        #print(udiff[0])
         inner_iter += 1
 
         t0 = OasisTimer("Tentative velocity")
@@ -242,15 +245,6 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     # AB projection for pressure on next timestep
     if AB_projection_pressure and t < (T - tstep * DOLFIN_EPS) and not stop:
         x_['p'].axpy(0.5, dp_.vector())
-
-    # Compute deformation increment
-    move.vector().zero()
-    move.vector().axpy(1, d_.vector())
-    #move.vector().axpy(-1, d_1.vector())
-
-    # Move mesh
-    ALE.move(mesh, move)
-    mesh.bounding_box_tree().build(mesh)
 
 total_timer.stop()
 #list_timings(TimingClear_keep, [TimingType_wall])
