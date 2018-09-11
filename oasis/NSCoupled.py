@@ -4,7 +4,7 @@ __copyright__ = 'Copyright (C) 2014 ' + __author__
 __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 import importlib
-from oasis.common import *
+from common import *
 
 """
 This module implements a generic steady state coupled solver for the
@@ -29,7 +29,7 @@ default_problem = 'DrivenCavity'
 #exec('from problems.NSCoupled.{} import *'.format(commandline_kwargs.get('problem', default_problem)))
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('oasis.problems.NSCoupled', problemname)))
+    problemmod = importlib.import_module('.'.join(('problems.NSCoupled', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -45,7 +45,7 @@ vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
 #exec('from solvers.NSCoupled.{} import *'.format(solver))
-solver = importlib.import_module('.'.join(('oasis.solvers.NSCoupled', solver)))
+solver = importlib.import_module('.'.join(('solvers.NSCoupled', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for

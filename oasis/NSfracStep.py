@@ -40,7 +40,7 @@ commandline_kwargs = parse_command_line()
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('oasis.problems.NSfracStep', problemname)))
+    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -55,7 +55,7 @@ problem_parameters(**vars())
 vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
-solver = importlib.import_module('.'.join(('oasis.solvers.NSfracStep', solver)))
+solver = importlib.import_module('.'.join(('solvers.NSfracStep', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for
@@ -122,8 +122,8 @@ print_solve_info = use_krylov_solvers and krylov_solvers['monitor_convergence']
 bcs = create_bcs(**vars())
 
 # LES setup
-#exec("from oasis.solvers.NSfracStep.LES.{} import *".format(les_model))
-lesmodel = importlib.import_module('.'.join(('oasis.solvers.NSfracStep.LES', les_model)))
+#exec("from solvers.NSfracStep.LES.{} import *".format(les_model))
+lesmodel = importlib.import_module('.'.join(('solvers.NSfracStep.LES', les_model)))
 vars().update({name:lesmodel.__dict__[name] for name in lesmodel.__all__})
 
 vars().update(les_setup(**vars()))
