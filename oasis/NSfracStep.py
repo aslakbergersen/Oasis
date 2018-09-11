@@ -33,7 +33,7 @@ problems/NSfracStep/__init__.py for all possible parameters.
 
 """
 import importlib
-from oasis.common import *
+from common import *
 
 commandline_kwargs = parse_command_line()
 
@@ -232,7 +232,7 @@ total_timer.stop()
 list_timings(TimingClear_keep, [TimingType_wall])
 info_red('Total computing time = {0:f}'.format(total_timer.elapsed()[0]))
 oasis_memory('Final memory use ')
-total_initial_dolfin_memory = MPI.sum(mpi_comm_world(), initial_memory_use)
+total_initial_dolfin_memory = MPI.sum(MPI.comm_world, initial_memory_use)
 info_red('Memory use for importing dolfin = {} MB (RSS)'.format(
     total_initial_dolfin_memory))
 info_red('Total memory use of solver = ' +

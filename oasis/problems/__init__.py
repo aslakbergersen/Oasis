@@ -63,27 +63,6 @@ Scalar = defaultdict(lambda: dict(Schmidt=1.0,
                                   family="CG",
                                   degree=1))
 
-# The following helper functions are available in dolfin
-# They are redefined here for printing only on process 0.
-RED = "\033[1;37;31m%s\033[0m"
-BLUE = "\033[1;37;34m%s\033[0m"
-GREEN = "\033[1;37;32m%s\033[0m"
-
-
-def info_blue(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
-        print(BLUE % s)
-
-
-def info_green(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
-        print(GREEN % s)
-
-
-def info_red(s, check=True):
-    if MPI.rank(mpi_comm_world()) == 0 and check:
-        print(RED % s)
-
 
 class OasisTimer(Timer):
     def __init__(self, task, verbose=False):
@@ -100,9 +79,9 @@ class OasisMemoryUsage:
     def __call__(self, s, verbose=False):
         self.prev = self.memory
         self.prev_vm = self.memory_vm
-        self.memory = MPI.sum(mpi_comm_world(), getMemoryUsage())
-        self.memory_vm = MPI.sum(mpi_comm_world(), getMemoryUsage(False))
-        if MPI.rank(mpi_comm_world()) == 0 and verbose:
+        self.memory = MPI.sum(MPI.comm_world, getMemoryUsage())
+        self.memory_vm = MPI.sum(MPI.comm_world, getMemoryUsage(False))
+        if MPI.rank(MPI.comm_world) == 0 and verbose:
             info_blue('{0:26s}  {1:10d} MB {2:10d} MB {3:10d} MB {4:10d} MB'.format(s,
                         int(self.memory - self.prev), int(self.memory),
                         int(self.memory_vm - self.prev_vm), int(self.memory_vm)))
@@ -147,7 +126,7 @@ def recursive_update(dst, src):
 def add_function_to_tstepfiles(function, newfolder, tstepfiles, tstep):
     name = function.name()
     tstepfolder = path.join(newfolder, "Timeseries")
-    tstepfiles[name] = XDMFFile(mpi_comm_world(),
+    tstepfiles[name] = XDMFFile(MPI.comm_world,
                                 path.join(tstepfolder,
                                           '{}_from_tstep_{}.xdmf'.format(name, tstep)))
     tstepfiles[name].function = function

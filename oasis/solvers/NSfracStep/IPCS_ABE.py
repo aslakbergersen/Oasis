@@ -206,7 +206,7 @@ def velocity_tentative_solve(ui, A, bcs, x_, x_2, u_sol, b, udiff,
 def scalar_assemble(Ta, a_scalar, dt, M, scalar_components, les_model, Schmidt_T,
                     b, nu, Schmidt, K, x_1, b0, KT, **NS_namespace):
     Ta = assemble(a_scalar, tensor=Ta)
-    Ta._scale(-1.)              # Negative convection on the rhs
+    Ta.axpy(-2., Ta, True)              # Negative convection on the rhs
     Ta.axpy(1. / dt, M, True)   # Add mass
 
     # Compute rhs for all scalars
@@ -224,7 +224,7 @@ def scalar_assemble(Ta, a_scalar, dt, M, scalar_components, les_model, Schmidt_T
             Ta.axpy(0.5 / Schmidt_T[ci], KT[0], True)
 
     # Reset matrix for lhs - Note scalar matrix does not contain diffusion
-    Ta._scale(-1.)
+    Ta.axpy(-2., Ta, True)
     Ta.axpy(2. / dt, M, True)
 
 
