@@ -33,6 +33,7 @@ problems/NSfracStep/__init__.py for all possible parameters.
 
 """
 import importlib
+import time
 from common import *
 
 commandline_kwargs = parse_command_line()
@@ -151,7 +152,7 @@ vars().update(setup(**vars()))
 # Anything problem specific
 vars().update(pre_solve_hook(**vars()))
 
-tic()
+_prev_time = time.time()
 stop = False
 total_timer = OasisTimer("Start simulations", True)
 while t < (T - tstep * DOLFIN_EPS) and not stop:
@@ -220,9 +221,9 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     if tstep % print_intermediate_info == 0:
         info_green( 'Time = {0:2.4e}, timestep = {1:6d}, End time = {2:2.4e}'.format(t, tstep, T))
         info_red('Total computing time on previous {0:d} timesteps = {1:f}'.format(
-            print_intermediate_info, toc()))
+            print_intermediate_info, time.time() - _prev_time))
         list_timings(TimingClear_clear, [TimingType_wall])
-        tic()
+        _prev_time = time.time()
 
     # AB projection for pressure on next timestep
     if AB_projection_pressure and t < (T - tstep * DOLFIN_EPS) and not stop:

@@ -97,13 +97,8 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
     """
     if use_krylov_solvers:
         ## tentative velocity solver ##
-        u_prec = PETScPreconditioner(
-            velocity_krylov_solver['preconditioner_type'])
-        u_sol = PETScKrylovSolver(
-            velocity_krylov_solver['solver_type'], u_prec)
-        u_sol.prec = u_prec  # Keep from going out of scope
-        # u_sol = KrylovSolver(velocity_krylov_solver['solver_type'],
-        #                     velocity_krylov_solver['preconditioner_type'])
+        u_prec = PETScPreconditioner(velocity_krylov_solver['preconditioner_type'])
+        u_sol = PETScKrylovSolver(velocity_krylov_solver['solver_type'], u_prec)
         #u_sol.parameters['preconditioner']['structure'] = 'same_nonzero_pattern'
         u_sol.parameters.update(krylov_solvers)
 
@@ -123,15 +118,10 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         sols = [u_sol, p_sol]
         ## scalar solver ##
         if len(scalar_components) > 0:
-            c_prec = PETScPreconditioner(
-                scalar_krylov_solver['preconditioner_type'])
-            c_sol = PETScKrylovSolver(
-                scalar_krylov_solver['solver_type'], c_prec)
-            c_sol.prec = c_prec
-            # c_sol = KrylovSolver(scalar_krylov_solver['solver_type'],
-            # scalar_krylov_solver['preconditioner_type'])
+            c_prec = PETScPreconditioner(scalar_krylov_solver['preconditioner_type'])
+            c_sol = PETScKrylovSolver(scalar_krylov_solver['solver_type'], c_prec)
             c_sol.parameters.update(krylov_solvers)
-            #c_sol.parameters['preconditioner']['structure'] = 'same_nonzero_pattern'
+            #c_sol.parameters['preconditieoner']['structure'] = 'same_nonzero_pattern'
             sols.append(c_sol)
         else:
             sols.append(None)

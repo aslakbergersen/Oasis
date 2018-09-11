@@ -31,13 +31,13 @@ def getMemoryUsage(rss=True):
 parameters["linear_algebra_backend"] = "PETSc"
 parameters["form_compiler"]["optimize"] = True
 parameters["form_compiler"]["cpp_optimize"] = True
-parameters["form_compiler"]["representation"] = "quadrature"
+#parameters["form_compiler"]["representation"] = "quadrature"
 #parameters["form_compiler"]["quadrature_degree"] = 4
 #parameters["form_compiler"]["cache_dir"] = "instant"
 parameters["form_compiler"]["cpp_optimize_flags"] = "-O3"
 #parameters["mesh_partitioner"] = "ParMETIS"
 #parameters["form_compiler"].add("no_ferari", True)
-set_log_level(False)
+set_log_level(99)
 
 # Default parameters for all solvers
 NS_parameters = dict(

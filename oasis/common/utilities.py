@@ -37,14 +37,13 @@ class Solver_cache_dict(dict):
         form, bcs, solver_type, preconditioner_type = key
         prec = PETScPreconditioner(preconditioner_type)
         sol = PETScKrylovSolver(solver_type, prec)
-        sol.prec = prec
-        #sol = KrylovSolver(solver_type, preconditioner_type)
 
         #sol.parameters["preconditioner"]["structure"] = "same"
         sol.parameters["error_on_nonconvergence"] = False
         sol.parameters["monitor_convergence"] = False
         sol.parameters["report"] = False
         self[key] = sol
+
         return self[key]
 
 
