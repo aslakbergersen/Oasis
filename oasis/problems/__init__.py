@@ -145,13 +145,17 @@ def recursive_update(dst, src):
     return dst
 
 
-def add_function_to_tstepfiles(function, newfolder, tstepfiles, tstep):
+def add_function_to_tstepfiles(function, newfolder, tstepfiles, tstep, NS_expressions):
     name = function.name()
     tstepfolder = path.join(newfolder, "Timeseries")
     tstepfiles[name] = XDMFFile(MPI.comm_world,
                                 path.join(tstepfolder,
                                           '{}_from_tstep_{}.xdmf'.format(name, tstep)))
-    tstepfiles[name].function = function
+    if name in NS_expressions.keys():
+        if MPI.rank(MPI.comm_world) == 0:
+            print("WARNING: Overwriting variable {} in NS_expressions".format(name))
+
+    NS_expressions[name] = function
     tstepfiles[name].parameters["rewrite_function_mesh"] = False
 
 

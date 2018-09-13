@@ -110,22 +110,21 @@ def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_dom
         # project or store velocity to vector function space
         for comp, tstepfile in six.iteritems(tstepfiles):
             if comp == "u":
-                V = q_['u0'].function_space()
                 # First time around create vector function and assigners
-                if not hasattr(tstepfile, 'uv'):
-                    tstepfile.uv = AssignedVectorFunction(u_)
+                if "uv" not in NS_expressions.keys():
+                    NS_expressions["uv"] = AssignedVectorFunction(u_)
 
                 # Assign solution to vector
-                tstepfile.uv()
+                NS_expressions["uv"]()
 
                 # Store solution vector
-                tstepfile.write(tstepfile.uv, float(tstep))
+                tstepfile.write(NS_expressions["uv"], float(tstep))
 
             elif comp in q_:
                 tstepfile.write(q_[comp], float(tstep))
 
             else:
-                tstepfile.write(tstepfile.function, float(tstep))
+                tstepfile.write(NS_expressions[comp], float(tstep))
 
     else:
         for comp, tstepfile in six.iteritems(tstepfiles):
