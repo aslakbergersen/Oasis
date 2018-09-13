@@ -5,7 +5,6 @@ __license__ = "GNU Lesser GPL version 3 or any later version"
 
 from ..NSCoupled import *
 from ..SkewedFlow import *
-# set_log_active(False)
 
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, **NS_namespace):

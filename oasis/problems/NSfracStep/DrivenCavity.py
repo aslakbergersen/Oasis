@@ -6,8 +6,6 @@ __license__ = "GNU Lesser GPL version 3 or any later version"
 from ..NSfracStep import *
 from ..DrivenCavity import *
 
-#set_log_active(False)
-
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, scalar_components, Schmidt, **NS_namespace):
     NS_parameters.update(
