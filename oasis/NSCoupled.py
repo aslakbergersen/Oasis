@@ -4,7 +4,7 @@ __copyright__ = 'Copyright (C) 2014 ' + __author__
 __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 import importlib
-from common import *
+from oasis.common import *
 
 """
 This module implements a generic steady state coupled solver for the
@@ -26,10 +26,9 @@ problems/NSCoupled/__init__.py for all possible parameters.
 commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
-#exec('from problems.NSCoupled.{} import *'.format(commandline_kwargs.get('problem', default_problem)))
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('problems.NSCoupled', problemname)))
+    problemmod = importlib.import_module('.'.join(('oasis.problems.NSCoupled', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -45,7 +44,7 @@ vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
 #exec('from solvers.NSCoupled.{} import *'.format(solver))
-solver = importlib.import_module('.'.join(('solvers.NSCoupled', solver)))
+solver = importlib.import_module('.'.join(('oasis.solvers.NSCoupled', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for
@@ -195,7 +194,7 @@ if len(scalar_components) > 0:
     iterate_scalar()
     scalar_timer.stop()
 
-list_timings(TimingClear_clear, [TimingType_wall])
+list_timings(TimingClear.clear, [TimingType.wall])
 info_red('Total computing time = {0:f}'.format(timer.elapsed()[0]))
 oasis_memory('Final memory use ')
 total_initial_dolfin_memory = MPI.sum(MPI.comm_world, initial_memory_use)

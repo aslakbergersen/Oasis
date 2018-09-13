@@ -34,14 +34,14 @@ problems/NSfracStep/__init__.py for all possible parameters.
 """
 import importlib
 import time
-from common import *
+from oasis.common import *
 
 commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
+    problemmod = importlib.import_module('.'.join(('oasis.problems.NSfracStep', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -56,7 +56,7 @@ problem_parameters(**vars())
 vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
-solver = importlib.import_module('.'.join(('solvers.NSfracStep', solver)))
+solver = importlib.import_module('.'.join(('oasis.solvers.NSfracStep', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for
@@ -123,8 +123,7 @@ print_solve_info = use_krylov_solvers and krylov_solvers['monitor_convergence']
 bcs = create_bcs(**vars())
 
 # LES setup
-#exec("from solvers.NSfracStep.LES.{} import *".format(les_model))
-lesmodel = importlib.import_module('.'.join(('solvers.NSfracStep.LES', les_model)))
+lesmodel = importlib.import_module('.'.join(('oasis.solvers.NSfracStep.LES', les_model)))
 vars().update({name:lesmodel.__dict__[name] for name in lesmodel.__all__})
 
 vars().update(les_setup(**vars()))
@@ -222,7 +221,7 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
         info_green( 'Time = {0:2.4e}, timestep = {1:6d}, End time = {2:2.4e}'.format(t, tstep, T))
         info_red('Total computing time on previous {0:d} timesteps = {1:f}'.format(
             print_intermediate_info, time.time() - _prev_time))
-        list_timings(TimingClear_clear, [TimingType_wall])
+        list_timings(TimingClear.clear, [TimingType.wall])
         _prev_time = time.time()
 
     # AB projection for pressure on next timestep
@@ -230,7 +229,7 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
         x_['p'].axpy(0.5, dp_.vector())
 
 total_timer.stop()
-list_timings(TimingClear_keep, [TimingType_wall])
+list_timings(TimingClear.keep, [TimingType.wall])
 info_red('Total computing time = {0:f}'.format(total_timer.elapsed()[0]))
 oasis_memory('Final memory use ')
 total_initial_dolfin_memory = MPI.sum(MPI.comm_world, initial_memory_use)
