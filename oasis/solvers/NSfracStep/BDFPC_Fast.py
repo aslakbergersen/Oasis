@@ -30,11 +30,12 @@ def setup(u_components, u, v, p, q, nu, nut_, LESsource,
     # Pressure Laplacian. Either reuse K or assemble new
     Ap = assemble_matrix(inner(grad(q), grad(p)) * dx, bcs['p'])
 
-    if les_model is "NoModel":
-        if not Ap.id() == K.id():
-            Bp = Matrix()
-            Ap.compressed(Bp)
-            Ap = Bp
+    # NOTE: No longer supported by DOLFIN, moved to fenicstools?
+    #if les_model is "NoModel":
+    #    if not Ap.id() == K.id():
+    #        Bp = Matrix()
+    #        Ap.compressed(Bp)
+    #        Ap = Bp
 
     # Allocate coefficient matrix (needs reassembling)
     A = Matrix(M)
@@ -169,7 +170,7 @@ def pressure_solve(dp_, x_, Ap, b, p_sol, bcs, nu, divu, Q, beta, **NS_namespace
     if hasattr(p_sol, 'normalize'):
         normalize(x_['p'])
 
-    dp_.vector()[:] = -dp_.vector()[:1]
+    dp_.vector()[:] = -dp_.vector()[:]
     dp_.vector().axpy(1.0, x_['p'])
     dp_.vector().axpy(nu, divu.vector())
     dp_.vector()[:] = (beta(0) / 3.0) * dp_.vector()[:]  # To reuse code from IPCS_ABCN

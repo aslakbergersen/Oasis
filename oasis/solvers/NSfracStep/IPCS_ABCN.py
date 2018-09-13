@@ -31,6 +31,7 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_,
     # Pressure Laplacian.
     Ap = assemble_matrix(inner(grad(q), grad(p)) * dx, bcs['p'])
 
+    # NOTE: No longer supported by DOLFIN, moved to fenicstools?
     # if les_model is "NoModel":
     # if not Ap.id() == K.id():
     # Compress matrix (creates new matrix)

@@ -33,15 +33,16 @@ def setup(u_components, u, v, p, q, nu, nut_, les_model, LESsource,
     # Pressure Laplacian. Either reuse K or assemble new
     Ap = assemble_matrix(inner(grad(q), grad(p)) * dx, bcs['p'])
 
-    if les_model is "NoModel":
-        if not Ap.id() == K.id():
-            # Compress matrix (creates new matrix)
-            Bp = Matrix()
-            Ap.compressed(Bp)
-            Ap = Bp
-            # Replace cached matrix with compressed version
-            key = (inner(grad(q), grad(p)) * dx, tuple(bcs['p']))
-            A_cache[key] = (Ap, A_cache[key][1])
+    # NOTE: No longer supported by DOLFIN, moved to fenicstools?
+    #if les_model is "NoModel":
+    #    if not Ap.id() == K.id():
+    #        # Compress matrix (creates new matrix)
+    #        Bp = Matrix()
+    #        Ap.compressed(Bp)
+    #        Ap = Bp
+    #        # Replace cached matrix with compressed version
+    #        key = (inner(grad(q), grad(p)) * dx, tuple(bcs['p']))
+    #        A_cache[key] = (Ap, A_cache[key][1])
 
     # Allocate coefficient matrix (needs reassembling)
     A = Matrix(M)
