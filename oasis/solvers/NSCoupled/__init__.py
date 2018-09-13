@@ -4,7 +4,7 @@ __copyright__ = "Copyright (C) 2014 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
 from dolfin import *
-from solvers import *
+from oasis.solvers import *
 
 """Define all functions required by coupled solver."""
 __all__ = ["NS_assemble", "NS_solve", "scalar_assemble",

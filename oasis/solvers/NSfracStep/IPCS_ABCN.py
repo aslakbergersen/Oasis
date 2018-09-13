@@ -319,5 +319,5 @@ def scalar_solve(ci, scalar_components, Ta, b, x_, bcs, c_sol,
         c_sol.solve(Ta, x_[ci], b[ci])
     Ta.axpy(-0.5 * nu / Schmidt[ci], K, True)  # Subtract diffusion
     # x_[ci][x_[ci] < 0] = 0.               # Bounded solution
-    #x_[ci].set_local(maximum(0., x_[ci].array()))
+    #x_[ci].set_local(maximum(0., x_[ci].get_local()))
     # x_[ci].apply("insert")

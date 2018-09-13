@@ -5,7 +5,7 @@ __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 from dolfin import (Function, FunctionSpace, TestFunction, sym, grad, dx, inner,
     sqrt, TrialFunction, project, CellVolume, as_vector, solve, Constant,
-    LagrangeInterpolator, assemble, FacetFunction, DirichletBC)
+    LagrangeInterpolator, assemble, MeshFunction, DirichletBC)
 from .DynamicModules import (tophatfilter, lagrange_average, compute_Lij,
                             compute_Mij)
 import numpy as np
@@ -27,7 +27,7 @@ def les_setup(u_, mesh, assemble_matrix, CG1Function, nut_krylov_solver, bcs, **
     # Define delta and project delta**2 to CG1
     delta = pow(CellVolume(mesh), 1. / dim)
     delta_CG1_sq = project(delta, CG1)
-    delta_CG1_sq.vector().set_local(delta_CG1_sq.vector().array()**2)
+    delta_CG1_sq.vector().set_local(delta_CG1_sq.vector().get_local()**2)
     delta_CG1_sq.vector().apply("insert")
 
     # Define nut_
@@ -36,12 +36,12 @@ def les_setup(u_, mesh, assemble_matrix, CG1Function, nut_krylov_solver, bcs, **
     Cs = Function(CG1)
     nut_form = Cs**2 * delta**2 * magS
     # Create nut_ BCs
-    ff = FacetFunction("size_t", mesh, 0)
+    ff = MeshFunction("size_t", mesh, 0)
     bcs_nut = []
     for i, bc in enumerate(bcs['u0']):
         bc.apply(u_[0].vector())  # Need to initialize bc
         m = bc.markers()  # Get facet indices of boundary
-        ff.array()[m] = i + 1
+        ff.get_local()[m] = i + 1
         bcs_nut.append(DirichletBC(CG1, Constant(0), ff, i + 1))
     nut_ = CG1Function(nut_form, mesh, method=nut_krylov_solver,
                        bcs=bcs_nut, bounded=True, name="nut")
@@ -54,7 +54,7 @@ def les_setup(u_, mesh, assemble_matrix, CG1Function, nut_krylov_solver, bcs, **
 
     # Assemble required filter matrices and functions
     G_under = Function(CG1, assemble(TestFunction(CG1) * dx))
-    G_under.vector().set_local(1. / G_under.vector().array())
+    G_under.vector().set_local(1. / G_under.vector().get_local())
     G_under.vector().apply("insert")
     G_matr = assemble(inner(p, q) * dx)
 
@@ -122,13 +122,13 @@ def les_update(u_ab, nut_, nut_form, dt, CG1, delta, tstep,
     Important that the term in nut_form is Cs**2 and not Cs
     since Cs here is stored as sqrt(JLM/JMM).
     """
-    Cs.vector().set_local(np.sqrt(JLM.vector().array() / JMM.vector().array()))
+    Cs.vector().set_local(np.sqrt(JLM.vector().get_local() / JMM.vector().get_local()))
     Cs.vector().apply("insert")
     tophatfilter(unfiltered=Cs, filtered=Cs, N=2, weight=1., **vars())
-    Cs.vector().set_local(Cs.vector().array().clip(max=0.3))
+    Cs.vector().set_local(Cs.vector().get_local().clip(max=0.3))
     Cs.vector().apply("insert")
 
     # Update nut_
-    nut_.vector().set_local(Cs.vector().array()**2 *
-                            delta_CG1_sq.vector().array() * magS)
+    nut_.vector().set_local(Cs.vector().get_local()**2 *
+                            delta_CG1_sq.vector().get_local() * magS)
     nut_.vector().apply("insert")

@@ -22,7 +22,7 @@ def les_setup(u_, mesh, KineticEnergySGS, assemble_matrix, CG1Function, nut_kryl
     delta = Function(DG)
     delta.vector().zero()
     delta.vector().axpy(1.0, assemble(TestFunction(DG) * dx))
-    delta.vector().set_local(delta.vector().array()**(1. / dim))
+    delta.vector().set_local(delta.vector().get_local()**(1. / dim))
     delta.vector().apply('insert')
 
     Ck = KineticEnergySGS["Ck"]
@@ -67,7 +67,7 @@ def les_update(nut_, nut_form, A_mass, At, u_, dt, bc_ksgs, bt, ksgs_sol,
     # Solve for ksgs
     bc_ksgs.apply(At, bt)
     ksgs_sol.solve(At, ksgs.vector(), bt)
-    ksgs.vector().set_local(ksgs.vector().array().clip(min=1e-7))
+    ksgs.vector().set_local(ksgs.vector().get_local().clip(min=1e-7))
     ksgs.vector().apply("insert")
 
     # Update nut_

@@ -25,8 +25,8 @@ def lagrange_average(u_CG1, dt, CG1, tensdim, delta_CG1_sq, dim,
     """
 
     # Update eps
-    eps = (dt * (J1.vector().array() * J2.vector().array())**(1. / 8.)
-           / (1.5 * np.sqrt(delta_CG1_sq.vector().array())))
+    eps = (dt * (J1.vector().get_local() * J2.vector().get_local())**(1. / 8.)
+           / (1.5 * np.sqrt(delta_CG1_sq.vector().get_local())))
     eps = eps / (1.0 + eps)
 
     # Compute tensor contractions
@@ -42,14 +42,14 @@ def lagrange_average(u_CG1, dt, CG1, tensdim, delta_CG1_sq, dim,
         solve(G_matr, gradJ1[i].vector(), dt*Sijmats[i]*J1.vector(), "cg", "hypre_amg")
         solve(G_matr, gradJ2[i].vector(), dt*Sijmats[i]*J2.vector(), "cg", "hypre_amg")
     # Compute J1 - dt*dot(u_ab,grad(J1))
-    J1_back = J1.vector().array()-([u_CG1[i].vector().array()*gradJ1[i].vector().array() for i in range(dim)])[0]
+    J1_back = J1.vector().get_local()-([u_CG1[i].vector().get_local()*gradJ1[i].vector().get_local() for i in range(dim)])[0]
     # Compute J2 - dt*dot(u_ab,grad(J2))
-    J2_back = J2.vector().array()-([u_CG1[i].vector().array()*gradJ2[i].vector().array() for i in range(dim)])[0]
+    J2_back = J2.vector().get_local()-([u_CG1[i].vector().get_local()*gradJ2[i].vector().get_local() for i in range(dim)])[0]
     J2_back[J2_back < 0] = 1E3
     """
 
-    J1_back = J1.vector().array()
-    J2_back = J2.vector().array()
+    J1_back = J1.vector().get_local()
+    J2_back = J2.vector().get_local()
 
     # Update J1
     J1.vector().set_local(eps * AijBij + (1 - eps) * J1_back)
@@ -60,7 +60,7 @@ def lagrange_average(u_CG1, dt, CG1, tensdim, delta_CG1_sq, dim,
     J2.vector().apply("insert")
 
     # Apply ramp function on J1 to remove negative values, but not set to 0.
-    J1.vector().set_local(J1.vector().array().clip(min=1E-32))
+    J1.vector().set_local(J1.vector().get_local().clip(min=1E-32))
     J1.vector().apply("insert")
 
 
@@ -118,7 +118,7 @@ def compute_Mij(Mij, G_matr, G_under, Sijmats, Sijcomps, Sijfcomps, delta_CG1_sq
     Sij = Sijcomps
     Sijf = Sijfcomps
     alpha = alphaval
-    deltasq = 2 * delta_CG1_sq.vector().array()
+    deltasq = 2 * delta_CG1_sq.vector().get_local()
 
     # Apply pre-assembled matrices and compute right hand sides
     if tensdim == 3:
@@ -157,7 +157,7 @@ def compute_Mij(Mij, G_matr, G_under, Sijmats, Sijcomps, Sijfcomps, delta_CG1_sq
     # Loop over components and add to Mij
     for i in range(tensdim):
         # Compute |S|*Sij
-        Mij[i].vector().set_local(magS * Sij[i].vector().array())
+        Mij[i].vector().set_local(magS * Sij[i].vector().get_local())
         Mij[i].vector().apply("insert")
         # Compute F(|S|*Sij)
         tophatfilter(unfiltered=Mij[i], filtered=Mij[i], **vars())
@@ -168,8 +168,8 @@ def compute_Mij(Mij, G_matr, G_under, Sijmats, Sijcomps, Sijfcomps, delta_CG1_sq
             Nij[i].vector().axpy(1.0, Mij[i].vector())
 
         # Compute 2*delta**2*(F(|S|Sij) - alpha**2*F(|S|)F(Sij)) and add to Mij[i]
-        Mij[i].vector().set_local(deltasq * (Mij[i].vector().array() -
-                                             (alpha**2) * magSf * Sijf[i].vector().array()))
+        Mij[i].vector().set_local(deltasq * (Mij[i].vector().get_local() -
+                                             (alpha**2) * magSf * Sijf[i].vector().get_local()))
         Mij[i].vector().apply("insert")
 
     # Return magS for use when updating nut_
@@ -197,7 +197,7 @@ def compute_Nij(Nij, G_matr, G_under, tensdim, Sijmats, Sijfcomps, delta_CG1_sq,
 
     Sijf = Sijfcomps
     alpha = alphaval
-    deltasq = 2 * delta_CG1_sq.vector().array()
+    deltasq = 2 * delta_CG1_sq.vector().get_local()
 
     # Need to compute F(F(Sij)), set up right hand sides
     if tensdim == 3:
@@ -225,8 +225,8 @@ def compute_Nij(Nij, G_matr, G_under, tensdim, Sijmats, Sijfcomps, delta_CG1_sq,
         # Filter Nij = F(|S|Sij) --> F(F(|S|Sij))
         tophatfilter(unfiltered=Nij[i], filtered=Nij[i], weight=1, **vars())
         # Compute 2*delta**2*(F(F(|S|Sij)) - alpha**2*F(F(|S))F(F(Sij)))
-        Nij[i].vector().set_local(deltasq * (Nij[i].vector().array() -
-                                             (alpha**2) * magSf * Sijf[i].vector().array()))
+        Nij[i].vector().set_local(deltasq * (Nij[i].vector().get_local() -
+                                             (alpha**2) * magSf * Sijf[i].vector().get_local()))
         Nij[i].vector().apply("insert")
 
 
@@ -236,16 +236,16 @@ def tensor_inner(tensdim, A=None, B=None, **NS_namespace):
     A numpy array is returned.
     """
     if tensdim == 3:
-        contraction = (A[0].vector().array() * B[0].vector().array()
-                       + 2 * A[1].vector().array() * B[1].vector().array()
-                       + A[2].vector().array() * B[2].vector().array())
+        contraction = (A[0].vector().get_local() * B[0].vector().get_local()
+                       + 2 * A[1].vector().get_local() * B[1].vector().get_local()
+                       + A[2].vector().get_local() * B[2].vector().get_local())
     else:
-        contraction = (A[0].vector().array() * B[0].vector().array()
-                       + 2 * A[1].vector().array() * B[1].vector().array()
-                       + 2 * A[2].vector().array() * B[2].vector().array()
-                       + A[3].vector().array() * B[3].vector().array()
-                       + 2 * A[4].vector().array() * B[4].vector().array()
-                       + A[5].vector().array() * B[5].vector().array())
+        contraction = (A[0].vector().get_local() * B[0].vector().get_local()
+                       + 2 * A[1].vector().get_local() * B[1].vector().get_local()
+                       + 2 * A[2].vector().get_local() * B[2].vector().get_local()
+                       + A[3].vector().get_local() * B[3].vector().get_local()
+                       + 2 * A[4].vector().get_local() * B[4].vector().get_local()
+                       + A[5].vector().get_local() * B[5].vector().get_local())
     return contraction
 
 
@@ -255,19 +255,19 @@ def mag(Sij, tensdim, **NS_namespace):
     """
     if tensdim == 3:
         # Extract Sij vectors
-        S00 = Sij[0].vector().array()
-        S01 = Sij[1].vector().array()
-        S11 = Sij[2].vector().array()
+        S00 = Sij[0].vector().get_local()
+        S01 = Sij[1].vector().get_local()
+        S11 = Sij[2].vector().get_local()
         # Compute |S|
         magS = np.sqrt(2 * (S00 * S00 + 2 * S01 * S01 + S11 * S11))
     elif tensdim == 6:
         # Extract Sij vectors
-        S00 = Sij[0].vector().array()
-        S01 = Sij[1].vector().array()
-        S02 = Sij[2].vector().array()
-        S11 = Sij[3].vector().array()
-        S12 = Sij[4].vector().array()
-        S22 = Sij[5].vector().array()
+        S00 = Sij[0].vector().get_local()
+        S01 = Sij[1].vector().get_local()
+        S02 = Sij[2].vector().get_local()
+        S11 = Sij[3].vector().get_local()
+        S12 = Sij[4].vector().get_local()
+        S22 = Sij[5].vector().get_local()
         # Compute |S|
         magS = np.sqrt(2 * (S00 * S00 + 2 * S01 * S01 + 2 * S02 * S02 + S11 * S11 +
                             2 * S12 * S12 + S22 * S22))

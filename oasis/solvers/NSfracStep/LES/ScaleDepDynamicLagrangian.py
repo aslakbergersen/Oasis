@@ -4,7 +4,7 @@ __copyright__ = 'Copyright (C) 2015 ' + __author__
 __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 from dolfin import (Function, assemble, TestFunction, dx, solve, Constant,
-    FacetFunction, DirichletBC)
+    MeshFunction, DirichletBC)
 from .DynamicModules import (tophatfilter, lagrange_average, compute_Lij,
     compute_Mij, compute_Qij, compute_Nij)
 from . import DynamicLagrangian
@@ -87,14 +87,14 @@ def les_update(u_ab, nut_, nut_form, dt, CG1, tstep,
     lagrange_average(J1=JQN, J2=JNN, Aij=Qij, Bij=Nij, **vars())
 
     # UPDATE Cs**2 = (JLM*JMM)/beta, beta = JQN/JNN
-    beta = (JQN.vector().array() / JNN.vector().array()).clip(min=0.5)
-    Cs.vector().set_local((np.sqrt((JLM.vector().array() / JMM.vector().array()) / beta)))
+    beta = (JQN.vector().get_local() / JNN.vector().get_local()).clip(min=0.5)
+    Cs.vector().set_local((np.sqrt((JLM.vector().get_local() / JMM.vector().get_local()) / beta)))
     Cs.vector().apply("insert")
     tophatfilter(unfiltered=Cs, filtered=Cs, N=2, weight=1, **vars())
-    Cs.vector().set_local(Cs.vector().array().clip(max=0.3))
+    Cs.vector().set_local(Cs.vector().get_local().clip(max=0.3))
     Cs.vector().apply("insert")
 
     # Update nut_
-    nut_.vector().set_local(Cs.vector().array()**2 *
-                            delta_CG1_sq.vector().array() * magS)
+    nut_.vector().set_local(Cs.vector().get_local()**2 *
+                            delta_CG1_sq.vector().get_local() * magS)
     nut_.vector().apply("insert")

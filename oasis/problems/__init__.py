@@ -18,6 +18,28 @@ import six
 # except:
 
 
+# The following helper functions are no longer available in dolfin
+# They are redefined here for printing only on process 0.
+RED = "\033[1;37;31m%s\033[0m"
+BLUE = "\033[1;37;34m%s\033[0m"
+GREEN = "\033[1;37;32m%s\033[0m"
+
+def info_blue(s, check=True):
+    if MPI.rank(MPI.comm_world) == 0 and check:
+        print(BLUE % s)
+
+
+def info_green(s, check=True):
+    if MPI.rank(MPI.comm_world) == 0 and check:
+        print(GREEN % s)
+
+
+def info_red(s, check=True):
+    if MPI.rank(MPI.comm_world) == 0 and check:
+        print(RED % s)
+
+
+
 def getMemoryUsage(rss=True):
     mypid = str(getpid())
     rss = "rss" if rss else "vsz"

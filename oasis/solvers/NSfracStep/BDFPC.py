@@ -60,7 +60,7 @@ def setup(u, q_, q_1, uc_comp, u_components, dt, v, U_AB, u_1, u_2, q_2,
              for i, ui in enumerate(u_components)}
 
     # Scalar with SUPG
-    h = CellSize(mesh)
+    h = CellDiameter(mesh)
     #vw = v + h*inner(grad(v), u_)
     vw = v
     n = FacetNormal(mesh)
