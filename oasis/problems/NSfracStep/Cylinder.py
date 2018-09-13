@@ -67,7 +67,7 @@ def pre_solve_hook(mesh, V, newfolder, tstepfiles, tstep, ds, u_,
     omega = Function(V, name='omega')
     # Store omega each save_step
     add_function_to_tstepfiles(omega, newfolder, tstepfiles, tstep)
-    ff = FacetFunction("size_t", mesh, 0)
+    ff = MeshFunction("size_t", mesh, 0)
     Cyl.mark(ff, 1)
     n = FacetNormal(mesh)
     ds = ds[ff]
@@ -85,7 +85,7 @@ def temporal_hook(q_, u_, tstep, V, uv, p_, plot_interval, omega, ds,
     R = VectorFunctionSpace(mesh, 'R', 0)
     c = TestFunction(R)
     tau = -p_ * Identity(2) + nu * (grad(u_) + grad(u_).T)
-    forces = assemble(dot(dot(tau, n), c) * ds(1)).array() * 2 / Umean**2 / D
+    forces = assemble(dot(dot(tau, n), c) * ds(1)).get_local() * 2 / Umean**2 / D
 
     print("Cd = {}, CL = {}".format(*forces))
 
@@ -105,21 +105,24 @@ def theend_hook(q_, u_, p_, uv, mesh, ds, V, nu, Umean, D, **NS_namespace):
     R = VectorFunctionSpace(mesh, 'R', 0)
     c = TestFunction(R)
     tau = -p_ * Identity(2) + nu * (grad(u_) + grad(u_).T)
-    ff = FacetFunction("size_t", mesh, 0)
+    ff = MeshFunction("size_t", mesh, 0)
     Cyl.mark(ff, 1)
     n = FacetNormal(mesh)
     ds = ds[ff]
-    forces = assemble(dot(dot(tau, n), c) * ds(1)).array() * 2 / Umean**2 / D
+    forces = assemble(dot(dot(tau, n), c) * ds(1)).get_local() * 2 / Umean**2 / D
 
     print("Cd = {}, CL = {}".format(*forces))
 
-    from fenicstools import Probes
-    from numpy import linspace, repeat, where, resize
-    xx = linspace(0, L, 10000)
-    x = resize(repeat(xx, 2), (10000, 2))
-    x[:, 1] = 0.2
-    probes = Probes(x.flatten(), V)
-    probes(u_[0])
-    nmax = where(probes.array() < 0)[0][-1]
-    print("L = ", x[nmax, 0] - 0.25)
-    print("dP = ", p_(Point(0.15, 0.2)) - p_(Point(0.25, 0.2)))
+    try:
+        from fenicstools import Probes
+        from numpy import linspace, repeat, where, resize
+        xx = linspace(0, L, 10000)
+        x = resize(repeat(xx, 2), (10000, 2))
+        x[:, 1] = 0.2
+        probes = Probes(x.flatten(), V)
+        probes(u_[0])
+        nmax = where(probes.get_local() < 0)[0][-1]
+        print("L = ", x[nmax, 0] - 0.25)
+        print("dP = ", p_(Point(0.15, 0.2)) - p_(Point(0.25, 0.2)))
+    except:
+        pass

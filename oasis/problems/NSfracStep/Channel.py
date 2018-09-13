@@ -5,7 +5,8 @@ __copyright__ = "Copyright (C) 2013 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
 from ..NSfracStep import *
-from fenicstools import StructuredGrid, Probes
+# FIXME: Dump fenicstools version to 2018.1
+#from fenicstools import StructuredGrid
 from numpy import arctan, array, cos, pi
 from os import getcwd, makedirs
 import pickle
@@ -52,14 +53,15 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
     NS_expressions.update(dict(constrained_domain=PeriodicDomain(Lx, Lz)))
 
 
-class ChannelGrid(StructuredGrid):
-    """Grid for computing statistics"""
-
-    def modify_mesh(self, dx, dy, dz):
-        """Create grid skewed towards the walls located at y = 1 and y = -1"""
-        dy[1][:] = (arctan(pi * (dy[1][:] + self.origin[1])) /
-                    arctan(pi) - self.origin[1])
-        return dx, dy, dz
+# FIXME: Dump fenicstools version to 2018.1
+#class ChannelGrid(StructuredGrid):
+#    """Grid for computing statistics"""
+#
+#    def modify_mesh(self, dx, dy, dz):
+#        """Create grid skewed towards the walls located at y = 1 and y = -1"""
+#        dy[1][:] = (arctan(pi * (dy[1][:] + self.origin[1])) /
+#                    arctan(pi) - self.origin[1])
+#        return dx, dy, dz
 
 
 def mesh(Nx, Ny, Nz, Lx, Ly, Lz, **params):
@@ -96,12 +98,15 @@ class PeriodicDomain(SubDomain):
             y[1] = x[1]
             y[2] = x[2] - self.Lz
 
+
 def inlet(x, on_bnd):
     return on_bnd and near(x[0], 0)
+
 
 # Specify body force
 def body_force(nu, Re_tau, utau, **NS_namespace):
     return Constant((utau**2, 0., 0.))
+
 
 def pre_solve_hook(V, u_, mesh, AssignedVectorFunction, newfolder, MPI,
                    Nx, Ny, Nz, Lx, Ly, Lz, **NS_namespace):
@@ -112,17 +117,20 @@ def pre_solve_hook(V, u_, mesh, AssignedVectorFunction, newfolder, MPI,
     uv = AssignedVectorFunction(u_)
     tol = 5e-8
 
+    # FIXME: Dump fenicstools version to 2018.1
     # It's periodic so don't pick the same location twice for sampling statistics:
-    stats = ChannelGrid(V, [Nx, Ny + 1, Nz], [tol, -Ly / 2., -Lz / 2. + tol], [[1., 0., 0.], [
-                        0., 1., 0.], [0., 0., 1.]], [Lx - Lx / Nx, Ly, Lz - Lz / Nz], statistics=True)
+    #stats = ChannelGrid(V, [Nx, Ny + 1, Nz], [tol, -Ly / 2., -Lz / 2. + tol], [[1., 0., 0.], [
+    #                    0., 1., 0.], [0., 0., 1.]], [Lx - Lx / Nx, Ly, Lz - Lz / Nz], statistics=True)
+    stats = None
 
-    # Create FacetFunction to compute flux
+    # Create MeshFunction to compute flux
     Inlet = AutoSubDomain(inlet)
-    facets = FacetFunction('size_t', mesh, 0)
+    facets = MeshFunction('size_t', mesh, 0)
     Inlet.mark(facets, 1)
     normal = FacetNormal(mesh)
 
     return dict(uv=uv, stats=stats, facets=facets, normal=normal)
+
 
 def create_bcs(V, q_, q_1, q_2, sys_comp, u_components, Ly, **NS_namespace):
     def walls(x, on_bnd):
@@ -147,6 +155,7 @@ class RandomStreamVector(Expression):
 
     def value_shape(self):
         return (3,)
+
 
 def initialize(V, q_, q_1, q_2, bcs, restart_folder, utau, nu, **NS_namespace):
     if restart_folder is None:
@@ -180,17 +189,19 @@ def temporal_hook(q_, u_, V, tstep, uv, stats, update_statistics,
                   facets, normal, check_if_reset_statistics, **NS_namespace):
     # print timestep
     info_red("tstep = {}".format(tstep))
-    if check_if_reset_statistics(folder):
-        info_red("Resetting statistics")
-        stats.probes.clear()
 
-    if tstep % update_statistics == 0:
-        stats(q_['u0'], q_['u1'], q_['u2'])
+    # FIXME: Dump fenicstools version to 2018.1
+    #if check_if_reset_statistics(folder):
+    #    info_red("Resetting statistics")
+    #    stats.probes.clear()
 
-    if tstep % save_statistics == 0:
-        statsfolder = path.join(newfolder, "Stats")
-        stats.toh5(0, tstep, filename=statsfolder +
-                   "/dump_mean_{}.h5".format(tstep))
+    #if tstep % update_statistics == 0:
+    #    stats(q_['u0'], q_['u1'], q_['u2'])
+
+    #if tstep % save_statistics == 0:
+    #    statsfolder = path.join(newfolder, "Stats")
+    #    stats.toh5(0, tstep, filename=statsfolder +
+    #               "/dump_mean_{}.h5".format(tstep))
 
     if tstep % check_flux == 0:
         u1 = assemble(dot(u_, normal) * ds(1, domain=mesh, subdomain_data=facets))
@@ -200,8 +211,9 @@ def temporal_hook(q_, u_, V, tstep, uv, stats, update_statistics,
         if MPI.rank(MPI.comm_world) == 0:
             print("Flux = ", u1, " tstep = ", tstep, " norm = ", normv, normw)
 
-def theend(newfolder, tstep, stats, **NS_namespace):
-    """Store statistics before exiting"""
-    statsfolder = path.join(newfolder, "Stats")
-    stats.toh5(0, tstep, filename=statsfolder +
-               "/dump_mean_{}.h5".format(tstep))
+# FIXME: Dump fenicstools version to 2018.1
+#def theend(newfolder, tstep, stats, **NS_namespace):
+#    """Store statistics before exiting"""
+#    statsfolder = path.join(newfolder, "Stats")
+#    stats.toh5(0, tstep, filename=statsfolder +
+#                               "/dump_mean_{}.h5".format(tstep))

@@ -42,17 +42,19 @@ def pre_solve_hook(mesh, V, **NS_namespace):
     Outlet = AutoSubDomain(outlet)
     Walls = AutoSubDomain(walls)
     Centerline = AutoSubDomain(centerline)
-    facets = FacetFunction('size_t', mesh, 0)
+    facets = MeshFunction('size_t', mesh, 0)
     Inlet.mark(facets, 1)
     Outlet.mark(facets, 2)
     Walls.mark(facets, 3)
     Centerline.mark(facets, 4)
 
-    z_senterline = linspace(-0.18269, 0.320, 1000)
-    x = array([[i, 0.0] for i in z_senterline])
-    senterline = StatisticsProbes(x.flatten(), V)
+    z_centerline = linspace(-0.18269, 0.320, 1000)
+    x = array([[i, 0.0] for i in z_centerline])
+    # FIXME: Dump fenicstools version to 2018.1
+    #centerline = StatisticsProbes(x.flatten(), V)
+    centerline = None
 
-    return dict(uv=Function(V), senterline=senterline, facets=facets,
+    return dict(uv=Function(V), centerline=centerline, facets=facets,
                 normal=normal)
 
 

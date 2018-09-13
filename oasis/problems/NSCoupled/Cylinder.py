@@ -54,11 +54,11 @@ def theend_hook(u_, p_, up_, mesh, ds, VQ, nu, Umean, c_, testing, **NS_namespac
     R = VectorFunctionSpace(mesh, 'R', 0)
     c = TestFunction(R)
     tau = -p_ * Identity(2) + nu * (grad(u_) + grad(u_).T)
-    ff = FacetFunction("size_t", mesh, 0)
+    ff = MeshFunction("size_t", mesh, 0)
     Cyl.mark(ff, 1)
     n = FacetNormal(mesh)
     ds = ds(subdomain_data=ff)
-    forces = assemble(dot(dot(tau, n), c) * ds(1)).array() * 2 / Umean**2 / D
+    forces = assemble(dot(dot(tau, n), c) * ds(1)).get_local() * 2 / Umean**2 / D
 
     try:
         print("Cd = {0:2.6e}, CL = {1:2.6e}".format(*forces))
@@ -67,15 +67,18 @@ def theend_hook(u_, p_, up_, mesh, ds, VQ, nu, Umean, c_, testing, **NS_namespac
         pass
 
     if not testing:
-        from fenicstools import Probes
-        from numpy import linspace, repeat, where, resize
-        xx = linspace(0, L, 10000)
-        x = resize(repeat(xx, 2), (10000, 2))
-        x[:, 1] = 0.2
-        probes = Probes(x.flatten(), VQ)
-        probes(up_)
-        nmax = where(probes.array()[:, 0] < 0)[0][-1]
-        print("L = ", x[nmax, 0] - 0.25)
-        print("dP = ", up_(Point(0.15, 0.2))[2] - up_(Point(0.25, 0.2))[2])
-        print("Global divergence error ", assemble(
-            dot(u_, n) * ds()), assemble(div(u_) * div(u_) * dx()))
+        try:
+            from fenicstools import Probes
+            from numpy import linspace, repeat, where, resize
+            xx = linspace(0, L, 10000)
+            x = resize(repeat(xx, 2), (10000, 2))
+            x[:, 1] = 0.2
+            probes = Probes(x.flatten(), VQ)
+            probes(up_)
+            nmax = where(probes.get_local()[:, 0] < 0)[0][-1]
+            print("L = ", x[nmax, 0] - 0.25)
+            print("dP = ", up_(Point(0.15, 0.2))[2] - up_(Point(0.25, 0.2))[2])
+            print("Global divergence error ", assemble(
+                dot(u_, n) * ds()), assemble(div(u_) * div(u_) * dx()))
+        except:
+            pass

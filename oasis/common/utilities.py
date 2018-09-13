@@ -93,18 +93,19 @@ class OasisFunction(Function):
         self.bf = inner(form, test) * dx()
         self.rhs = Vector(self.vector())
 
-        if method.lower() == "default":
-            self.A = A_cache[(Mass, tuple(bcs))]
-            self.sol = Solver_cache[(Mass, tuple(
-                bcs), solver_type, preconditioner_type)]
+        # FIXME: Dump fenicstools version to 2018.1
+        #if method.lower() == "default":
+        self.A = A_cache[(Mass, tuple(bcs))]
+        self.sol = Solver_cache[(Mass, tuple(bcs), solver_type, preconditioner_type)]
 
-        elif method.lower() == "lumping":
-            assert Space.ufl_element().degree() < 2
-            self.A = A_cache[(Mass, tuple(bcs))]
-            ones = Function(Space)
-            ones.vector()[:] = 1.
-            self.ML = self.A * ones.vector()
-            self.ML.set_local(1. / self.ML.array())
+        # FIXME: Dump fenicstools version to 2018.1
+        #elif method.lower() == "lumping":
+        #    assert Space.ufl_element().degree() < 2
+        #    self.A = A_cache[(Mass, tuple(bcs))]
+        #    ones = Function(Space)
+        #    ones.vector()[:] = 1.
+        #    self.ML = self.A * ones.vector()
+        #    self.ML.set_local(1. / self.ML.get_local())
 
     def assemble_rhs(self):
         """
@@ -130,12 +131,14 @@ class OasisFunction(Function):
         for bc in self.bcs:
             bc.apply(self.rhs)
 
-        if self.method.lower() == "default":
-            self.sol.solve(self.A, self.vector(), self.rhs)
+        # FIXME: Dump fenicstools version to 2018.1
+        #if self.method.lower() == "default":
+        self.sol.solve(self.A, self.vector(), self.rhs)
 
-        else:
-            self.vector().zero()
-            self.vector().axpy(1.0, self.rhs * self.ML)
+        # FIXME: Dump fenicstools version to 2018.1
+        #else:
+        #self.vector().zero()
+        #self.vector().axpy(1.0, self.rhs * self.ML)
 
 
 class GradFunction(OasisFunction):
@@ -166,15 +169,16 @@ class GradFunction(OasisFunction):
             self.matvec = [
                 A_cache[(self.test * TrialFunction(Source).dx(i) * dx, ())], p_]
 
-        if solver_method.lower() == "gradient_matrix":
-            from fenicstools import compiled_gradient_module
-            DG = FunctionSpace(Space.mesh(), 'DG', 0)
-            G = assemble(TrialFunction(DG) * self.test * dx())
-            dg = Function(DG)
-            dP = assemble(TrialFunction(p_.function_space()).dx(i)
-                          * TestFunction(DG) * dx())
-            self.WGM = compiled_gradient_module.compute_weighted_gradient_matrix(
-                G, dP, dg)
+        # FIXME: Dump fenicstools version to 2018.1
+        #if solver_method.lower() == "gradient_matrix":
+        #    from fenicstools import compiled_gradient_module
+        #    DG = FunctionSpace(Space.mesh(), 'DG', 0)
+        #    G = assemble(TrialFunction(DG) * self.test * dx())
+        #    dg = Function(DG)
+        #    dP = assemble(TrialFunction(p_.function_space()).dx(i)
+        #                  * TestFunction(DG) * dx())
+        #    self.WGM = compiled_gradient_module.compute_weighted_gradient_matrix(
+        #        G, dP, dg)
 
     def assemble_rhs(self, u=None):
         """
@@ -201,11 +205,12 @@ class GradFunction(OasisFunction):
             self.matvec[1] = u
             self.bf = u.dx(self.i) * self.test * dx()
 
-        if self.method.lower() == "gradient_matrix":
-            self.vector().zero()
-            self.vector().axpy(1.0, self.WGM * self.matvec[1].vector())
-        else:
-            OasisFunction.__call__(self, assemb_rhs=assemb_rhs)
+        # FIXME: Dump fenicstools version to 2018.1
+        #if self.method.lower() == "gradient_matrix":
+        #    self.vector().zero()
+        #    self.vector().axpy(1.0, self.WGM * self.matvec[1].vector())
+        #else:
+        OasisFunction.__call__(self, assemb_rhs=assemb_rhs)
 
 
 class DivFunction(OasisFunction):
@@ -232,17 +237,18 @@ class DivFunction(OasisFunction):
             self.matvec = [[A_cache[(self.test * TrialFunction(Source).dx(i) * dx, ())], u_[i]]
                            for i in range(Space.mesh().geometry().dim())]
 
-        if solver_method.lower() == "gradient_matrix":
-            from fenicstools import compiled_gradient_module
-            DG = FunctionSpace(Space.mesh(), 'DG', 0)
-            G = assemble(TrialFunction(DG) * self.test * dx())
-            dg = Function(DG)
-            self.WGM = []
-            st = TrialFunction(Source)
-            for i in range(Space.mesh().geometry().dim()):
-                dP = assemble(st.dx(i) * TestFunction(DG) * dx)
-                A = Matrix(G)
-                self.WGM.append(compiled_gradient_module.compute_weighted_gradient_matrix(A, dP, dg))
+        # FIXME: Dump fenicstools version to 2018.1
+        #if solver_method.lower() == "gradient_matrix":
+        #    from fenicstools import compiled_gradient_module
+        #    DG = FunctionSpace(Space.mesh(), 'DG', 0)
+        #    G = assemble(TrialFunction(DG) * self.test * dx())
+        #    dg = Function(DG)
+        #    self.WGM = []
+        #    st = TrialFunction(Source)
+        #    for i in range(Space.mesh().geometry().dim()):
+        #        dP = assemble(st.dx(i) * TestFunction(DG) * dx)
+        #        A = Matrix(G)
+        #        self.WGM.append(compiled_gradient_module.compute_weighted_gradient_matrix(A, dP, dg))
 
     def assemble_rhs(self):
         """
@@ -258,17 +264,18 @@ class DivFunction(OasisFunction):
 
     def __call__(self, assemb_rhs=True):
 
-        if self.method.lower() == "gradient_matrix":
-            # Note that assembling rhs is not necessary using gradient_matrix
-            if assemb_rhs:
-                self.assemble_rhs()
-            self.vector().zero()
-            for i in range(self.function_space().mesh().geometry().dim()):
-                self.vector().axpy(
-                    1., self.WGM[i] * self.matvec[i][1].vector())
+        # FIXME: Dump fenicstools version to 2018.1
+        #if self.method.lower() == "gradient_matrix":
+        #    # Note that assembling rhs is not necessary using gradient_matrix
+        #    if assemb_rhs:
+        #        self.assemble_rhs()
+        #    self.vector().zero()
+        #    for i in range(self.function_space().mesh().geometry().dim()):
+        #        self.vector().axpy(
+        #            1., self.WGM[i] * self.matvec[i][1].vector())
 
-        else:
-            OasisFunction.__call__(self, assemb_rhs=assemb_rhs)
+        #else:
+        OasisFunction.__call__(self, assemb_rhs=assemb_rhs)
 
 
 class CG1Function(OasisFunction):
@@ -292,35 +299,37 @@ class CG1Function(OasisFunction):
                                method=solver_method, solver_type=solver_type,
                                preconditioner_type=preconditioner_type)
 
-        if solver_method.lower() == "weightedaverage":
-            from fenicstools import compiled_gradient_module
-            DG = FunctionSpace(mesh, 'DG', 0)
-            # Cannot use cache. Matrix will be modified
-            self.A = assemble(TrialFunction(DG) * self.test * dx())
-            self.dg = dg = Function(DG)
-            compiled_gradient_module.compute_DG0_to_CG_weight_matrix(
-                self.A, dg)
-            self.bf_dg = inner(form, TestFunction(DG)) * dx()
+        # FIXME: Dump fenicstools version to 2018.1
+        #if solver_method.lower() == "weightedaverage":
+        #    from fenicstools import compiled_gradient_module
+        #    DG = FunctionSpace(mesh, 'DG', 0)
+        #    # Cannot use cache. Matrix will be modified
+        #    self.A = assemble(TrialFunction(DG) * self.test * dx())
+        #    self.dg = dg = Function(DG)
+        #    compiled_gradient_module.compute_DG0_to_CG_weight_matrix(
+        #        self.A, dg)
+        #    self.bf_dg = inner(form, TestFunction(DG)) * dx()
 
     def __call__(self):
 
-        if self.method.lower() == "weightedaverage":
-            assemble(self.bf_dg, tensor=self.dg.vector())
+        # FIXME: Dump fenicstools version to 2018.1
+        #if self.method.lower() == "weightedaverage":
+        #    assemble(self.bf_dg, tensor=self.dg.vector())
 
-            # Compute weighted average on CG1
-            self.vector().zero()
-            self.vector().axpy(1.0, self.A * self.dg.vector())
-            self.vector().apply("insert")
-            [bc.apply(self.vector()) for bc in self.bcs]
+        #    # Compute weighted average on CG1
+        #    self.vector().zero()
+        #    self.vector().axpy(1.0, self.A * self.dg.vector())
+        #    self.vector().apply("insert")
+        #    [bc.apply(self.vector()) for bc in self.bcs]
 
-        else:
-            OasisFunction.__call__(self)
+        #else:
+        OasisFunction.__call__(self)
 
         if self.bounded:
             self.bound()
 
     def bound(self):
-        self.vector().set_local(self.vector().array().clip(min=0))
+        self.vector().set_local(self.vector().get_local().clip(min=0))
         self.vector().apply("insert")
 
 
