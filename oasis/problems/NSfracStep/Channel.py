@@ -145,8 +145,11 @@ def create_bcs(V, q_, q_1, q_2, sys_comp, u_components, Ly, **NS_namespace):
     return bcs
 
 
-class RandomStreamVector(Expression):
+class RandomStreamVector(UserExpression):
     random.seed(2 + MPI.rank(MPI.comm_world))
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def eval(self, values, x):
         values[0] = 0.0005 * random.random()

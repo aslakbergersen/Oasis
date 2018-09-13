@@ -8,8 +8,8 @@ from ..NSfracStep import *
 from ..SkewedFlow import *
 from numpy import cos, pi, cosh
 
-warning("""
-This problem does not work well with IPCS since the outflow
+warning_message = """
+WARNING: This problem does not work well with IPCS since the outflow
 boundary condition
 
     grad(u)*n=0, p=0
@@ -22,7 +22,10 @@ Need to use coupled solver with pseudo-traction
 
 or extrude outlet such that the outflow boundary condition
 becomes more realistic.
-""")
+"""
+
+if MPI.rank(MPI.comm_world) == 0:
+    print(warning_message)
 
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, **NS_namespace):
@@ -34,10 +37,10 @@ def problem_parameters(NS_parameters, **NS_namespace):
         print_velocity_pressure_convergence=True)
 
 
-def create_bcs(V, Q, mesh, **NS_namespace):
+def create_bcs(V, Q, mesh, NS_expressions, **NS_namespace):
     # Create inlet profile by solving Poisson equation on boundary
     bmesh = BoundaryMesh(mesh, 'exterior')
-    cc = CellFunction('size_t', bmesh, 0)
+    cc = MeshFunction('size_t', bmesh, 0)
     ii = AutoSubDomain(inlet)
     ii.mark(cc, 1)
     smesh = SubMesh(bmesh, cc, 1)
@@ -49,15 +52,23 @@ def create_bcs(V, Q, mesh, **NS_namespace):
           bcs=[DirichletBC(Vu, Constant(0), DomainBoundary())])
 
     # Wrap the boundary function in an Expression to avoid the need to interpolate it back to V
-    class MyExp(Expression):
+    class MyExp(UserExpression):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
         def eval(self, values, x):
             try:
                 values[0] = su(x)
             except:
                 values[0] = 0
 
+    my_exp = MyExp(element=V.ufl_element())
+
+    # Have to store it to avoid problems with python garbage collection
+    NS_expressions["my_exp"] = my_exp
+
     bc0 = DirichletBC(V, 0, walls)
-    bc1 = DirichletBC(V, MyExp(element=V.ufl_element()), inlet)
+    bc1 = DirichletBC(V, my_exp, inlet)
     bc2 = DirichletBC(V, 0, inlet)
     return dict(u0=[bc0, bc1],
                 u1=[bc0, bc2],

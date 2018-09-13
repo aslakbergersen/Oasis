@@ -17,7 +17,7 @@ def problem_parameters(NS_parameters, **NS_namespace):
         max_error=1e-12)
 
 
-def create_bcs(V, VQ, mesh, **NS_namespace):
+def create_bcs(V, VQ, mesh, NS_expressions, **NS_namespace):
     # Create inlet profile by solving Poisson equation on boundary
     bmesh = BoundaryMesh(mesh, 'exterior')
     cc = CellFunction('size_t', bmesh, 0)
@@ -44,8 +44,13 @@ def create_bcs(V, VQ, mesh, **NS_namespace):
         def value_shape(self):
             return (3,)
 
+    my_exp = MyExp(element=VQ.sub(0).ufl_element())
+
+    # Have to store it to avoid problems with python garbage collection
+    NS_expressions["my_exp"] = my_exp
+
     bc0 = DirichletBC(VQ.sub(0), (0, 0, 0), walls)
-    bc1 = DirichletBC(VQ.sub(0), MyExp(element=VQ.sub(0).ufl_element()), inlet)
+    bc1 = DirichletBC(VQ.sub(0), my_exp, inlet)
     return dict(up=[bc0, bc1])
 
 

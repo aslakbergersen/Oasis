@@ -8,14 +8,12 @@ from dolfin import BoxMesh, Point
 # Create a mesh
 h = 0.5
 L = 1.
+tol = 1e-8
 
 
 def mesh(N=20, **params):
     m = BoxMesh(Point(0, 0, 0), Point(L, 1, 1), N, N, N)
     return m
-
-
-tol = 1e-8
 
 
 # Specify boundary conditions
