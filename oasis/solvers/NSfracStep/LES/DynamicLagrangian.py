@@ -5,10 +5,11 @@ __license__ = 'GNU Lesser GPL version 3 or any later version'
 
 from dolfin import (Function, FunctionSpace, TestFunction, sym, grad, dx, inner,
     sqrt, TrialFunction, project, CellVolume, as_vector, solve, Constant,
-    LagrangeInterpolator, assemble, MeshFunction, DirichletBC)
+    LagrangeInterpolator, assemble, MeshFunction, DirichletBC, MPI)
 from .DynamicModules import (tophatfilter, lagrange_average, compute_Lij,
                             compute_Mij)
 import numpy as np
+import sys
 
 __all__ = ['les_setup', 'les_update']
 
@@ -35,11 +36,17 @@ def les_setup(u_, mesh, assemble_matrix, CG1Function, nut_krylov_solver, bcs, **
     magS = sqrt(2 * inner(Sij, Sij))
     Cs = Function(CG1)
     nut_form = Cs**2 * delta**2 * magS
+
     # Create nut_ BCs
     ff = MeshFunction("size_t", mesh, 0)
     bcs_nut = []
     for i, bc in enumerate(bcs['u0']):
         bc.apply(u_[0].vector())  # Need to initialize bc
+        if not hasattr(bc, "markers"):
+            if MPI.rank(MPI.comm_world) == 0:
+                print("ERROR: Python interface in FEniCS is missing DirichletBC.markers(), " \
+                     + "can therefore not run correctly. Exit on 0.")
+            sys.exit(0)
         m = bc.markers()  # Get facet indices of boundary
         ff.get_local()[m] = i + 1
         bcs_nut.append(DirichletBC(CG1, Constant(0), ff, i + 1))
