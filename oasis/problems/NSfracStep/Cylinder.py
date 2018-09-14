@@ -62,11 +62,11 @@ def initialize(x_1, x_2, bcs, **NS_namespace):
 
 
 def pre_solve_hook(mesh, V, newfolder, tstepfiles, tstep, ds, u_,
-                   AssignedVectorFunction, **NS_namespace):
+                   AssignedVectorFunction, NS_expressions, **NS_namespace):
     uv = AssignedVectorFunction(u_, name='Velocity')
     omega = Function(V, name='omega')
     # Store omega each save_step
-    add_function_to_tstepfiles(omega, newfolder, tstepfiles, tstep)
+    add_function_to_tstepfiles(omega, newfolder, tstepfiles, tstep, NS_expressions)
     ff = MeshFunction("size_t", mesh, 0)
     Cyl.mark(ff, 1)
     n = FacetNormal(mesh)
@@ -87,7 +87,8 @@ def temporal_hook(q_, u_, tstep, V, uv, p_, plot_interval, omega, ds,
     tau = -p_ * Identity(2) + nu * (grad(u_) + grad(u_).T)
     forces = assemble(dot(dot(tau, n), c) * ds(1)).get_local() * 2 / Umean**2 / D
 
-    print("Cd = {}, CL = {}".format(*forces))
+    # Forces is empty
+    #print("Cd = {}, CL = {}".format(*forces))
 
     if tstep % save_step == 0:
         try:
@@ -111,7 +112,8 @@ def theend_hook(q_, u_, p_, uv, mesh, ds, V, nu, Umean, D, **NS_namespace):
     ds = ds[ff]
     forces = assemble(dot(dot(tau, n), c) * ds(1)).get_local() * 2 / Umean**2 / D
 
-    print("Cd = {}, CL = {}".format(*forces))
+    # Forces is empty
+    #print("Cd = {}, CL = {}".format(*forces))
 
     try:
         from fenicstools import Probes
