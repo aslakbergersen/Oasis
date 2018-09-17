@@ -138,17 +138,18 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
             sols.append(None)
     else:
         ## tentative velocity solver ##
-        u_sol = LUSolver('mumps')
-        u_sol.parameters['same_nonzero_pattern'] = True
+        # FIXME: LUSolver missing overloaded function LUSolver(method) (pybind11 error)
+        u_sol = LUSolver() #'mumps')
+        #u_sol.parameters['same_nonzero_pattern'] = True
         ## pressure solver ##
-        p_sol = LUSolver('mumps')
-        p_sol.parameters['reuse_factorization'] = True
+        p_sol = LUSolver() #'mumps')
+        #p_sol.parameters['reuse_factorization'] = True
         if bcs['p'] == []:
             p_sol.normalize = True
         sols = [u_sol, p_sol]
         ## scalar solver ##
         if len(scalar_components) > 0:
-            c_sol = LUSolver('mumps')
+            c_sol = LUSolver() #'mumps')
             sols.append(c_sol)
         else:
             sols.append(None)

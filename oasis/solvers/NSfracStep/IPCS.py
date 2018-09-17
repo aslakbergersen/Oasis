@@ -74,7 +74,7 @@ def pressure_solve(Fp, p_, bcs, dp_, x_, u_, q_, Q, **NS_namespace):
     solve(lhs(Fp) == rhs(Fp), p_, bcs['p'])
     if bcs['p'] == []:
         normalize(p_.vector())
-    dp_.vector()._scale(-1)
+    dp_.vector()[:] = -dp_.vector()[:]
     dp_.vector().axpy(1.0, x_['p'])
 
 
