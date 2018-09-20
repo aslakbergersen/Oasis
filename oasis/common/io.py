@@ -83,7 +83,7 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep,
 
 
 def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
-                  NS_parameters, tstepfiles, u_, u_components, scalar_components,
+                  NS_parameters, NS_expressions, tstepfiles, u_, u_components, scalar_components,
                   output_timeseries_as_vector, constrained_domain,
                   AssignedVectorFunction, **NS_namespace):
     """Called at end of timestep. Check for kill and save solution if required."""
@@ -91,7 +91,7 @@ def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
     if tstep % save_step == 0:
         save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_domain,
                                output_timeseries_as_vector, u_components, AssignedVectorFunction,
-                               scalar_components, NS_parameters)
+                               scalar_components, NS_parameters, NS_expressions)
 
     killoasis = check_if_kill(folder)
     if tstep % checkpoint == 0 or killoasis:
@@ -103,7 +103,7 @@ def save_solution(tstep, t, q_, q_1, folder, newfolder, save_step, checkpoint,
 
 def save_tstep_solution_h5(tstep, q_, u_, newfolder, tstepfiles, constrained_domain,
                            output_timeseries_as_vector, u_components, AssignedVectorFunction,
-                           scalar_components, NS_parameters):
+                           scalar_components, NS_parameters, NS_expressions):
     """Store solution on current timestep to XDMF file."""
     timefolder = path.join(newfolder, 'Timeseries')
     if output_timeseries_as_vector:

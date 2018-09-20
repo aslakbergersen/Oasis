@@ -144,8 +144,9 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         ## pressure solver ##
         p_sol = LUSolver() #'mumps')
         #p_sol.parameters['reuse_factorization'] = True
-        if bcs['p'] == []:
-            p_sol.normalize = True
+        # FIXME: LUSolver().normalize not supported in FEniCS 2018.1
+        #if bcs['p'] == []:
+            #p_sol.normalize = True
         sols = [u_sol, p_sol]
         ## scalar solver ##
         if len(scalar_components) > 0:
