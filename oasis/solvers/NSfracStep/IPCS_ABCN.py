@@ -127,14 +127,19 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         else:
             sols.append(None)
     else:
+
         ## tentative velocity solver ##
         u_sol = LUSolver()
-        u_sol.parameters['same_nonzero_pattern'] = True
+        # FIXME LUSolver() parameter not supported in FEniCS 2018.1
+        #u_sol.parameters['same_nonzero_pattern'] = True
         ## pressure solver ##
         p_sol = LUSolver()
-        p_sol.parameters['reuse_factorization'] = True
-        if bcs['p'] == []:
-            p_sol.normalize = True
+        # FIXME LUSolver() parameter not supported in FEniCS 2018.1
+        #p_sol.parameters['reuse_factorization'] = True
+        # FIXME LUSolver().normalize is not supported in FEniCS 2018.1
+        #if bcs['p'] == []:
+        #    p_sol.normalize = True
+
         sols = [u_sol, p_sol]
         ## scalar solver ##
         if len(scalar_components) > 0:

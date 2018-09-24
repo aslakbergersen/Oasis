@@ -44,8 +44,9 @@ def get_solvers(**NS_namespace):
 
     """
     up_sol, c_sol = LUSolver(), LUSolver()
-    up_sol.parameters["same_nonzero_pattern"] = True
-    c_sol .parameters["same_nonzero_pattern"] = True
+    # FIXME LUSolver() parameter not supported in FEniCS 2018.1
+    #up_sol.parameters["same_nonzero_pattern"] = True
+    #c_sol .parameters["same_nonzero_pattern"] = True
     return up_sol, c_sol
 
 def print_velocity_pressure_info(iter, error, **NS_namespace):
