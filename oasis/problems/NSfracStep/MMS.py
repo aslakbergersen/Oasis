@@ -20,10 +20,10 @@ def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_n
     #p_mms  = "cos(x[1] * pi) * sin(x[0] * pi) * (t_e + 1) + eps"
 
     # From J. L. Guermond et al. 2005
-    ux_mms = "pi*cos(t_e) * sin(2*pi*x[1]) * sin(pi*x[0])*sin(pi*x[0]) + eps "
+    ux_mms = "pi*sin(t_e) * sin(2*pi*x[1]) * sin(pi*x[0])*sin(pi*x[0]) + eps "
     #ux_mms_dx = "2*pi*pi * cos(t_e) * cos(2*pi*x[1]) * sin(pi*x[0])*sin(pi*x[0])"
     #uy_mms = "-" + ux_mms_dx + "*x[1] + cos(x[0]*pi) + eps"
-    uy_mms = "-pi*cos(t_e) * sin(2*pi*x[0]) * sin(pi*x[1])*sin(pi*x[1]) + eps "
+    uy_mms = "-pi*sin(t_e) * sin(2*pi*x[0]) * sin(pi*x[1])*sin(pi*x[1]) + eps "
 
     # Our suggestion for a divergence free solution
     #ux_mms = "(cos(pi*x[0]) + sin(pi*x[1])) * cos(t_e) + eps "
@@ -31,7 +31,7 @@ def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_n
 
     wx_mms = "0" #ux_mms + " + cos(t_e) * sin(2*pi*x[0]) * sin(2*pi*x[1])"
     wy_mms = "0" #uy_mms + " + cos(t_e) * sin(2*pi*x[0]) * sin(2*pi*x[1])"
-    p_mms  = "-cos(t_e) * cos(pi*x[0]) * sin(pi*x[1]) + eps "
+    p_mms  = "sin(t_e) * cos(pi*x[0]) * sin(pi*x[1]) + eps "
 
     #TODO: Create a test to check if the velocity is divergence free
 
@@ -42,16 +42,16 @@ def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_n
         wy_mms = wy_mms,
         p_mms  = p_mms,
         nu   = 1,
-        dt   = 0.01,
-        T    = 1,
+        dt   = 0.001,
+        T    = 0.005,
         N    = 40,
         eps  = eps,
         print_intermediate_info = 1e10,
         folder="MMS_results",
-        iters_on_first_timestep = 5,
+        iters_on_first_timestep = 1,
         max_iter  = 1,
         max_error = 1e-9,
-        velocity_degree = 1,
+        velocity_degree = 2,
         pressure_degree = 1,
         use_krylov_solvers = False,
         print_velocity_pressure_convergence = False))
@@ -78,7 +78,7 @@ def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_n
 # Create a mesh here
 def mesh(N, **params):
     #m = UnitSquareMesh(N, N)
-    m = RectangleMesh(Point(0.0, 0.0), Point(1.0, 1.0), N, N)
+    m = RectangleMesh(Point(-0.5, -0.5), Point(0.5, 0.5), N, N)
     return m
 
 
@@ -201,7 +201,8 @@ def pre_solve_hook(V, Q, mesh, newfolder, q_, t, velocity_degree, u_components, 
     coordinates = mesh.coordinates()
     dof_map = vertex_to_dof_map(V)
 
-    return dict(mesh_sol=mesh_sol, dof_map=dof_map, wxmms=wxmms, wymms=wymms,
+    return dict(mesh_sol=mesh_sol, dof_map=dof_map,
+                wxmms=wxmms, wymms=wymms,
                 wx_sol=wx_sol, wy_sol=wy_sol,
                 F_mesh=F_mesh, bc_mesh=bc_mesh, a_mesh=a_mesh, l_mesh=l_mesh,
                 A_mesh=A_mesh, L_mesh=L_mesh, coordinates=coordinates, viz_sol=viz_sol,

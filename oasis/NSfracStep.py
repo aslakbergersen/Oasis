@@ -40,12 +40,12 @@ commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
-#try:
-problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
-#except ImportError:
-#    problemmod = importlib.import_module(problemname)
-#except:
-#    raise RuntimeError(problemname+' not found')
+try:
+    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
+except ImportError:
+    problemmod = importlib.import_module(problemname)
+except:
+    raise RuntimeError(problemname+' not found')
 
 vars().update(**vars(problemmod))
 
