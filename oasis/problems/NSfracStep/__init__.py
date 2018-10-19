@@ -82,6 +82,13 @@ NS_parameters.update(
 )
 
 
+def pre_boundary_condition(**NS_namespace):
+    """Called after defining the function spaces and functions,
+       but before the boundary
+       conditions.
+    """
+    pass
+
 def velocity_tentative_hook(**NS_namespace):
     """Called just prior to solving for tentative velocity."""
     pass
@@ -102,5 +109,5 @@ def temporal_hook(**NS_namespace):
     pass
 
 def update_prescribed_motion(**NS_namespace):
-    """ Test"""
+    """If the solver has moving boundaries the mesh has to be updated in this function"""
     pass

@@ -8,8 +8,9 @@ from ..NSfracStep import *
 from ..SkewedFlow import *
 from numpy import cos, pi, cosh
 
-warning("""
-This problem does not work well with IPCS since the outflow
+if MPI.rank(MPI.comm_world) == 0:
+    print("""
+WARNING: This problem does not work well with IPCS since the outflow
 boundary condition
 
     grad(u)*n=0, p=0
@@ -22,7 +23,7 @@ Need to use coupled solver with pseudo-traction
 
 or extrude outlet such that the outflow boundary condition
 becomes more realistic.
-""")
+    """)
 
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, **NS_namespace):

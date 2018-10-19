@@ -115,10 +115,11 @@ class Flag_y(UserExpression):
         super().__init__(**kwargs)
 
     def get_A(self):
-        if self.t < 2:
-            return  0
-        else:
-            return self.factor * np.sin(2 * np.pi * (self.t - 2) / self.T_end)
+        #if self.t < 2:
+        #    return  0
+        #else:
+        # FIXME: put two back
+        return self.factor * np.sin(2 * np.pi * (self.t - 2 + 2) / self.T_end)
 
     def update(self, t):
         self.t = t
@@ -143,10 +144,11 @@ class Flag_x(UserExpression):
         super().__init__(**kwargs)
 
     def get_A(self):
-        if self.t < 2:
-            return 0
-        else:
-            return - self.factor * np.sin(2 * np.pi * (self.t - 2) / self.T_end)
+        #if self.t < 2:
+        #    return 0
+        #else:
+        # FIXME: set two back
+        return - self.factor * np.sin(2 * np.pi * (self.t - 2 + 2) / self.T_end)
 
     def update(self, t):
         self.t = t
@@ -162,27 +164,11 @@ class Flag_x(UserExpression):
 
     def eval(self, values, x):
         tetha = self.angle(x)
-        values[:] = [self.A * (x[0] - 5.5)**2 * np.tan(tetha) - x[1] * np.sin(tetha)]
+        values[:] = [self.A * (x[0] - 5.5)**2 * np.tan(tetha) - (x[1] - 6) * np.sin(tetha)] # y not centered?
+        #print(self.A * (x[0] - 5.5)**2 * np.tan(tetha) - (x[1] - 6) * np.sin(tetha))
 
 
-class Flag_vec(UserExpression):
-    def __init__(self, flag_x, flag_y, **kwargs):
-        self.flag_x = flag_x
-        self.flag_y = flag_y
-        super().__init__(**kwargs)
-
-    def update(self, t):
-        pass
-
-    def eval(self, values, x):
-        #values[0] = self.flag_x.external_eval(x)[0]
-        values[1] = self.flag_y.external_eval(x)[0]
-
-
-def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
-               NS_expressions, tstep, dt, H, f_h, b_h, L, b_dist, b_l, **NS_namespace):
-    info_red("Creating boundary conditions")
-
+def pre_boundary_condition(H, b_dist, b_l, f_h, b_h, L, mesh, **NS_namespace):
     inlet = AutoSubDomain(lambda x, b: b and x[0] <= DOLFIN_EPS)
     walls = AutoSubDomain(lambda x, b: b and (near(x[1], 0) or near(x[1], H)))
     box = AutoSubDomain(lambda x, b: b and (1 <= x[1] <= 3*H/4) and (1 <= x[0] <= b_dist +
@@ -194,11 +180,19 @@ def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
 
     boundary = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
     boundary.set_all(0)
+
     inlet.mark(boundary, 1)
     walls.mark(boundary, 2)
     box.mark(boundary, 3)
     flag.mark(boundary, 4)
     outlet.mark(boundary, 5)
+
+    return dict(boundary=boundary)
+
+
+def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
+               boundary, NS_expressions, tstep, dt, **NS_namespace):
+    info_red("Creating boundary conditions")
 
     flag_x = Flag_x(0, 10, 0.075, element=V.ufl_element())
     flag_y = Flag_y(0, 10, 0.01875, flag_x, element=V.ufl_element())
@@ -206,18 +200,18 @@ def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
     NS_expressions["flag_x"] = flag_x
     NS_expressions["flag_y"] = flag_y
 
-    bcs = dict((ui, []) for ui in sys_comp)
-    bcu_flag_x = DirichletBC(V, Constant(0), boundary, 4) #flag_x, boundary, 4)
-    bcu_flag_y = DirichletBC(V, flag_y, boundary, 4)
-
     bcu_in_x = DirichletBC(V, Constant(1), boundary, 1)
     bcu_in_y = DirichletBC(V, Constant(0), boundary, 1)
 
     bcu_wall = DirichletBC(V, Constant(0), boundary, 2)
     bcu_box = DirichletBC(V, Constant(0), boundary, 3)
 
+    bcu_flag_x = DirichletBC(V, Constant(0), boundary, 4) #flag_x, boundary, 4)
+    bcu_flag_y = DirichletBC(V, flag_y, boundary, 4)
+
     bcp_out = DirichletBC(Q, Constant(0), boundary, 5)
 
+    bcs = dict((ui, []) for ui in sys_comp)
     bcs['u0'] = [bcu_flag_x, bcu_in_x, bcu_wall, bcu_box]
     bcs['u1'] = [bcu_flag_y, bcu_in_y, bcu_wall, bcu_box] # bcu_out_y
     bcs["p"] = [bcp_out]
@@ -225,8 +219,8 @@ def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder,
     return bcs
 
 
-def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt, L,
-                   b_dist, b_l, H, f_h, **NS_namespace):
+def pre_solve_hook(V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt, L,
+                   b_dist, b_l, H, f_h, u_components, boundary, **NS_namespace):
     """Called prior to time loop"""
     viz_d = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "deformation.xdmf"))
     viz_u = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "velocity.xdmf"))
@@ -237,26 +231,13 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt,
         viz.parameters["rewrite_function_mesh"] = True
         viz.parameters["flush_output"] = True
 
-
-    flag = AutoSubDomain(lambda x, b: b and (H / 2 - f_h / 2 - DOLFIN_EPS <= x[1] <= H / 2 +
-                                             f_h + DOLFIN_EPS ) and (b_dist + b_l <= x[0] <= L - 1))
-    rigid = AutoSubDomain(lambda x, b: b and (near(x[1], H) or
-                                              near(x[1], 0) or
-                                              near(x[0], 0) or
-                                              near(x[0], L) or
-                                              1 < x[0] < b_dist + b_l + DOLFIN_EPS*1000))
-    boundary = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
-    boundary.set_all(0)
-    flag.mark(boundary, 1)
-    rigid.mark(boundary, 2)
-
     Vv = VectorFunctionSpace(mesh, "CG", velocity_degree)
     DG = FunctionSpace(mesh, "DG", velocity_degree)
     u_vec = Function(Vv, name="u")
 
     # Set up mesh solver
-    u_mesh, v_mesh = TrialFunction(W), TestFunction(W)
-    f_mesh = Function(W)
+    u_mesh, v_mesh = TrialFunction(V), TestFunction(V)
+    f_mesh = Function(V)
 
     A = CellDiameter(mesh)
     D = project(A, DG)
@@ -273,69 +254,71 @@ def pre_solve_hook(W, V, u_, mesh, newfolder, T, d_, velocity_degree, tstep, dt,
     A_mesh = assemble(a_mesh)
     L_mesh = assemble(l_mesh)
 
-    flag_vec = Flag_vec(NS_expressions["flag_x"], NS_expressions["flag_y"],
-                        element=W.ufl_element())
-    NS_expressions["flag_vec"] = flag_vec
-    flag_bc = DirichletBC(W, flag_vec, boundary, 1)
-    rigid_bc = DirichletBC(W, Constant((0, 0, 0)), boundary, 2)
-    bc_mesh = [rigid_bc, flag_bc]
+    flag_bc_x = DirichletBC(V, NS_expressions["flag_x"], boundary, 4)
+    flag_bc_y = DirichletBC(V, NS_expressions["flag_y"], boundary, 4)
+    rigid_bc_in = DirichletBC(V, Constant(0), boundary, 1)
+    rigid_bc_walls = DirichletBC(V, Constant(0), boundary, 2)
+    rigid_bc_out = DirichletBC(V, Constant(0), boundary, 3)
+    rigid_bc_box = DirichletBC(V, Constant(0), boundary, 5)
 
-    mesh_prec = PETScPreconditioner("ilu")  # in tests sor are faster .. 
+    bc_mesh = dict((ui, []) for ui in u_components)
+    rigid_bc = [rigid_bc_in, rigid_bc_walls, rigid_bc_out, rigid_bc_box]
+    bc_mesh["u0"] = [flag_bc_x] + rigid_bc
+    bc_mesh["u1"] = [flag_bc_y] + rigid_bc
+
+    mesh_prec = PETScPreconditioner("ilu")    # In tests "sor" is faster.
     mesh_sol = PETScKrylovSolver("gmres", mesh_prec)
-    w_vec = Function(W)
 
     krylov_solvers = dict(monitor_convergence=False,
-                          report=False,
+                          report=True,
                           error_on_nonconvergence=False,
                           nonzero_initial_guess=True,
-                          maximum_iterations=200,
-                          relative_tolerance=1e-10,
-                          absolute_tolerance=1e-10)
+                          maximum_iterations=20,
+                          relative_tolerance=1e-8,
+                          absolute_tolerance=1e-8)
 
     mesh_sol.parameters.update(krylov_solvers)
+    coordinates = mesh.coordinates()
+    dof_map = vertex_to_dof_map(V)
 
     return dict(viz_p=viz_p, viz_u=viz_u, viz_d=viz_d, u_vec=u_vec, mesh_sol=mesh_sol,
-                F_mesh=F_mesh, bc_mesh=bc_mesh, w_vec=w_vec, viz_w=viz_w,
-                a_mesh=a_mesh, l_mesh=l_mesh, A_mesh=A_mesh, L_mesh=L_mesh)
+                F_mesh=F_mesh, bc_mesh=bc_mesh, viz_w=viz_w, dof_map=dof_map,
+                a_mesh=a_mesh, l_mesh=l_mesh, A_mesh=A_mesh, L_mesh=L_mesh,
+                coordinates=coordinates)
 
 
 def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, F_mesh,
-                             bc_mesh, w_vec, NS_expressions, move,
-                             a_mesh, l_mesh, A_mesh, L_mesh, mesh mesh,t,
+                             bc_mesh, NS_expressions, dof_map,
+                             a_mesh, l_mesh, A_mesh, L_mesh, mesh, coordinates,
                              **NS_namespace):
     # Update time
     for key, value in NS_expressions.items():
         if key != "uv":
             value.update(t)
 
-    # Read deformation
-    d_1.vector().zero()
-    d_1.vector().axpy(1, d_.vector())
+    for ui in u_components:
+        # Update deformation
+        d_1[ui].vector().zero()
+        d_1[ui].vector().axpy(1, d_[ui].vector())
 
-    # Solve for d and w
-    assemble(a_mesh, tensor=A_mesh)
-    assemble(l_mesh, tensor=L_mesh)
+        # Solve for d and w
+        assemble(a_mesh, tensor=A_mesh)
+        assemble(l_mesh, tensor=L_mesh)
 
-    for bc in bc_mesh:
-        bc.apply(A_mesh, L_mesh)
+        for bc in bc_mesh[ui]:
+            bc.apply(A_mesh, L_mesh)
 
-    mesh_sol.solve(A_mesh, d_.vector(), L_mesh)
+        mesh_sol.solve(A_mesh, d_[ui].vector(), L_mesh)
 
-    w_vec.vector().zero()
-    w_vec.vector().axpy(1/dt, d_.vector())
-    w_vec.vector().axpy(-1/dt, d_1.vector())
+        # Compute deformation increment
+        w_[ui].vector().zero()
+        w_[ui].vector().axpy(1/dt, d_[ui].vector())
+        w_[ui].vector().axpy(-1/dt, d_1[ui].vector())
 
-    # Read velocity
-    for i, ui in enumerate(u_components):
-        assign(w_[ui], w_vec.sub(i))
+        # Move mesh
+        coordinates[:, int(ui[-1])] += (w_[ui].vector().get_local()*dt)[dof_map]
 
-    # Compute deformation increment
-    move.vector().zero()
-    move.vector().axpy(1, d_.vector())
-    move.vector().axpy(-1, d_1.vector())
-
-    # Move mesh
-    ALE.move(mesh, move)
+    # Do we need this line?
     mesh.bounding_box_tree().build(mesh)
 
 
@@ -344,13 +327,10 @@ def temporal_hook(t, d_, w_, q_, f, tstep, viz_u, viz_d, viz_p, u_components,
     assign(u_vec.sub(0), q_["u0"])
     assign(u_vec.sub(1), q_["u1"])
 
-    viz_d.write(d_, t)
+    #viz_d.write(d_, t)
     viz_u.write(u_vec, t)
     viz_p.write(q_["p"], t)
     viz_w.write(w_["u0"], t)
     viz_w.write(w_["u1"], t)
 
-    print(round(t, 4) , u_vec((12, 6, 0))) # #, file="output_flag.txt")
-
-    #if tstep % 10 == 0:
-    #    print("Time:", round(t,3))
+    print("Time:", round(t, 4), "u:", u_vec((12, 6, 0))) # #, file="output_flag.txt")

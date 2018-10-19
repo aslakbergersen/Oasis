@@ -74,8 +74,6 @@ V = Q = FunctionSpace(mesh, 'CG', velocity_degree,
 if velocity_degree != pressure_degree:
     Q = FunctionSpace(mesh, 'CG', pressure_degree,
                       constrained_domain=constrained_domain)
-W = VectorFunctionSpace(mesh, 'CG', velocity_degree,
-                        constrained_domain=constrained_domain)
 
 u = TrialFunction(V)
 v = TestFunction(V)
@@ -85,7 +83,7 @@ q = TestFunction(Q)
 # Use dictionary to hold all FunctionSpaces
 VV = dict((ui, V) for ui in uc_comp)
 VV['p'] = Q
-VV["d"] = W
+VV["d"] = V
 
 # Create dictionaries for the solutions at three timesteps
 q_ = dict((ui, Function(VV[ui], name=ui)) for ui in sys_comp)
@@ -93,11 +91,10 @@ q_1 = dict((ui, Function(VV[ui], name=ui + "_1")) for ui in sys_comp)
 q_2 = dict((ui, Function(V, name=ui + "_2")) for ui in u_components)
 
 # Hold the wall motion
-#d_p1 = dict((ui, Function(W, name=ui)) for ui in u_components)
-#d_m1 = dict((ui, Function(W, name=ui)) for ui in u_components)
-d_ = Function(W, name="deformation") #dict((ui, Function(W, name=ui)) for ui in u_components)
-d_1 = Function(W)
-move = Function(W)
+d_ = dict((ui, Function(V, name=ui)) for ui in u_components)
+d_1 = dict((ui, Function(V, name=ui)) for ui in u_components)
+#d_ = Function(V, name="deformation") #dict((ui, Function(W, name=ui)) for ui in u_components)
+#d_1 = Function(V)
 w_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 
 # Read in previous solution if restarting
@@ -107,9 +104,7 @@ init_from_restart(**vars())
 u_ = as_vector([q_[ui] for ui in u_components])    # Velocity vector at t
 u_1 = as_vector([q_1[ui] for ui in u_components])  # Velocity vector at t - dt
 u_2 = as_vector([q_2[ui] for ui in u_components])  # Velocity vector at t - 2*dt
-#du_ = as_vector([d_[ui] for ui in u_components])
-wu_ = as_vector([w_[ui] for ui in u_components])
-
+wu_ = as_vector([w_[ui] for ui in u_components])   # Presdribed motion displacement
 
 # Adams Bashforth projection of velocity at t - dt/2
 U_AB = 1.5 * u_1 - 0.5 * u_2
@@ -132,6 +127,9 @@ for ci in scalar_components:
     exec("{}_1  = q_1['{}']".format(ci, ci))
 
 print_solve_info = use_krylov_solvers and krylov_solvers['monitor_convergence']
+
+# Anything problem specific
+vars().update(pre_boundary_condition(**vars()))
 
 # Boundary conditions
 bcs = create_bcs(**vars())
@@ -169,6 +167,7 @@ vars().update(pre_solve_hook(**vars()))
 stop = False
 total_timer = OasisTimer("Start simulations", True)
 while t < (T - tstep * DOLFIN_EPS) and not stop:
+    t_start = time.time()
     t += dt
     tstep += 1
     inner_iter = 0
@@ -242,6 +241,7 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
         #list_timings(TimingClear_clear, [TimingType_wall])
         #tic()
 
+    print(time.time() - t_start)
     # AB projection for pressure on next timestep
     if AB_projection_pressure and t < (T - tstep * DOLFIN_EPS) and not stop:
         x_['p'].axpy(0.5, dp_.vector())
