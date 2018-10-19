@@ -40,12 +40,12 @@ commandline_kwargs = parse_command_line()
 
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
-try:
-    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
-except ImportError:
-    problemmod = importlib.import_module(problemname)
-except:
-    raise RuntimeError(problemname+' not found')
+#try:
+problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
+#except ImportError:
+#    problemmod = importlib.import_module(problemname)
+#except:
+#    raise RuntimeError(problemname+' not found')
 
 vars().update(**vars(problemmod))
 
@@ -93,8 +93,6 @@ q_2 = dict((ui, Function(V, name=ui + "_2")) for ui in u_components)
 # Hold the wall motion
 d_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 d_1 = dict((ui, Function(V, name=ui)) for ui in u_components)
-#d_ = Function(V, name="deformation") #dict((ui, Function(W, name=ui)) for ui in u_components)
-#d_1 = Function(V)
 w_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 
 # Read in previous solution if restarting
@@ -140,6 +138,7 @@ lesmodel = importlib.import_module('.'.join(('solvers.NSfracStep.LES', les_model
 vars().update({name:lesmodel.__dict__[name] for name in lesmodel.__all__})
 vars().update(les_setup(**vars()))
 
+
 # Initialize solution
 initialize(**vars())
 
@@ -148,8 +147,9 @@ u_sol, p_sol, c_sol = get_solvers(**vars())
 
 # Get constant body forces
 f = body_force(**vars())
-assert(isinstance(f, Coefficient))
+#assert(isinstance(f, Coefficient))
 b0 = dict((ui, assemble(v * f[i] * dx)) for i, ui in enumerate(u_components))
+
 
 # Get scalar sources
 fs = scalar_source(**vars())
@@ -180,7 +180,6 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
 
     while udiff[0] > max_error and inner_iter < num_iter:
-        #print(udiff[0])
         inner_iter += 1
 
         t0 = OasisTimer("Tentative velocity")
@@ -241,7 +240,6 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
         #list_timings(TimingClear_clear, [TimingType_wall])
         #tic()
 
-    print(time.time() - t_start)
     # AB projection for pressure on next timestep
     if AB_projection_pressure and t < (T - tstep * DOLFIN_EPS) and not stop:
         x_['p'].axpy(0.5, dp_.vector())

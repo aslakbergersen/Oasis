@@ -87,7 +87,7 @@ def pre_boundary_condition(**NS_namespace):
        but before the boundary
        conditions.
     """
-    pass
+    return {}
 
 def velocity_tentative_hook(**NS_namespace):
     """Called just prior to solving for tentative velocity."""

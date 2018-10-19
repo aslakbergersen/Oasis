@@ -25,7 +25,6 @@ for i in range(len(match)):
 
 for name, err in [("u0: ", L2_norm_u0), ("u1: ", L2_norm_u1), ("p: ", L2_norm_p)]:
     for i in range(len(dx)-1):
-        
         tmp = math.log(err[i]/err[i+1]) / math.log(dx[i]/dx[i+1])
         print(name, tmp)
 
