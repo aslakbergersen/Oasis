@@ -109,5 +109,6 @@ def temporal_hook(**NS_namespace):
     pass
 
 def update_prescribed_motion(**NS_namespace):
-    """If the solver has moving boundaries the mesh has to be updated in this function"""
-    pass
+    """If the solver has moving boundaries the mesh has to be updated in this function.
+    See problems/NSfracStep/flag.py for an example."""
+    return False

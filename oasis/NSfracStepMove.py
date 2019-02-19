@@ -82,7 +82,7 @@ q = TestFunction(Q)
 # Use dictionary to hold all FunctionSpaces
 VV = dict((ui, V) for ui in uc_comp)
 VV['p'] = Q
-#VV["d"] = V
+VV["d"] = V
 
 # Create dictionaries for the solutions at three timesteps
 q_ = dict((ui, Function(VV[ui], name=ui)) for ui in sys_comp)
@@ -92,7 +92,7 @@ q_2 = dict((ui, Function(V, name=ui + "_2")) for ui in u_components)
 # Hold the wall motion
 #d_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 #d_1 = dict((ui, Function(V, name=ui)) for ui in u_components)
-#w_ = dict((ui, Function(V, name=ui)) for ui in u_components)
+w_ = dict((ui, Function(V, name=ui)) for ui in u_components)
 
 # Read in previous solution if restarting
 init_from_restart(**vars())
@@ -101,7 +101,7 @@ init_from_restart(**vars())
 u_ = as_vector([q_[ui] for ui in u_components])    # Velocity vector at t
 u_1 = as_vector([q_1[ui] for ui in u_components])  # Velocity vector at t - dt
 u_2 = as_vector([q_2[ui] for ui in u_components])  # Velocity vector at t - 2*dt
-#wu_ = as_vector([w_[ui] for ui in u_components])   # Presdribed motion displacement
+wu_ = as_vector([w_[ui] for ui in u_components])   # Presdribed motion displacement
 
 # Adams Bashforth projection of velocity at t - dt/2
 U_AB = 1.5 * u_1 - 0.5 * u_2
@@ -110,7 +110,7 @@ U_AB = 1.5 * u_1 - 0.5 * u_2
 x_ = dict((ui, q_[ui].vector()) for ui in sys_comp)        # Solution vectors t
 x_1 = dict((ui, q_1[ui].vector()) for ui in sys_comp)      # Solution vectors t - dt
 x_2 = dict((ui, q_2[ui].vector()) for ui in u_components)  # Solution vectors t - 2*dt
-#wx_ = dict((ui, w_[ui].vector()) for ui in u_components)
+wx_ = dict((ui, w_[ui].vector()) for ui in u_components)
 
 # Create vectors to hold rhs of equations
 b = dict((ui, Vector(x_[ui])) for ui in sys_comp)      # rhs vectors (final)
@@ -173,18 +173,16 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     udiff = array([1e8])  # Norm of velocity change over last inner iter
     num_iter = max(iters_on_first_timestep, max_iter) if tstep == 1 else max_iter
 
-    #t1 = Timer("Prescribed motion")
-    #update_prescribed_motion(**vars())
-    #t1.stop()
+    move = update_prescribed_motion(**vars())
 
-    t1 = Timer("Rest of the time-loop")
     start_timestep_hook(**vars())
-    #b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
+    if move:
+        b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
 
     while udiff[0] > max_error and inner_iter < num_iter:
         inner_iter += 1
 
-        #t0 = OasisTimer("Tentative velocity")
+        t0 = OasisTimer("Tentative velocity")
         if inner_iter == 1:
             les_update(**vars())
             assemble_first_inner_iter(**vars())

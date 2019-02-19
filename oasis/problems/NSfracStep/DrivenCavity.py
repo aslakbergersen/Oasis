@@ -21,9 +21,9 @@ def problem_parameters(NS_parameters, scalar_components, Schmidt, **NS_namespace
         print_intermediate_info=100,
         use_krylov_solvers=True)
 
-    scalar_components += ["alfa", "beta"]
-    Schmidt["alfa"] = 1.
-    Schmidt["beta"] = 10.
+    #scalar_components += ["alfa", "beta"]
+    #Schmidt["alfa"] = 1.
+    #Schmidt["beta"] = 10.
 
     #NS_parameters['krylov_solvers'] = {'monitor_convergence': False,
     #                                   'report': False,
@@ -49,7 +49,7 @@ def initialize(x_1, x_2, bcs, **NS_namespace):
     for ui in x_2:
         [bc.apply(x_2[ui]) for bc in bcs[ui]]
 
-
+"""
 def pre_solve_hook(mesh, velocity_degree, **NS_namespace):
     Vv = VectorFunctionSpace(mesh, 'CG', velocity_degree)
     return dict(uv=Function(Vv))
@@ -83,3 +83,4 @@ def theend_hook(u_, p_, uv, mesh, testing, **NS_namespace):
             plot(psi, title='Streamfunction', interactive=True)
         except:
             pass
+"""

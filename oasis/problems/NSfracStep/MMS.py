@@ -5,35 +5,30 @@ __copyright__ = "Copyright (C) 2013 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
 from ..NSfracStep import *
-from numpy import pi, arctan, array
+import numpy as np
 import sys
 set_log_level(99)
 
+
 # Override some problem specific parameters
 def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_namespace):
-    eps  = 1e-6
-    #ux_mms = "cos(x[0] + x[1]) * t_e + eps"
-    #uy_mms = "-cos(x[0] + x[1]) * t_e + eps"
-    #p_mms = "(sin(x[1]) + cos(x[0])) * t_e + eps"
-    #ux_mms = "(-sin(x[1] * pi) + cos(x[0] * pi)) * (t_e + 1) + eps"
-    #uy_mms = "(-pi*sin(x[0] * pi)*x[1] + cos(x[0] * pi)) * (t_e + 1) + eps"
-    #p_mms  = "cos(x[1] * pi) * sin(x[0] * pi) * (t_e + 1) + eps"
+    eps = 0
 
     # From J. L. Guermond et al. 2005
-    ux_mms = "pi*sin(t_e) * sin(2*pi*x[1]) * sin(pi*x[0])*sin(pi*x[0]) + eps "
+    ux_mms = " pi*cos(t_e) * sin(2*x[1]) * sin(x[0]) * sin(x[0]) + eps + x[1]/pi"
+    uy_mms = "-pi*cos(t_e) * sin(2*x[0]) * sin(x[1]) * sin(x[1]) + eps"
+    p_mms = "cos(t_e) * cos(x[0]) * sin(x[1]) + eps "
     #ux_mms_dx = "2*pi*pi * cos(t_e) * cos(2*pi*x[1]) * sin(pi*x[0])*sin(pi*x[0])"
     #uy_mms = "-" + ux_mms_dx + "*x[1] + cos(x[0]*pi) + eps"
-    uy_mms = "-pi*sin(t_e) * sin(2*pi*x[0]) * sin(pi*x[1])*sin(pi*x[1]) + eps "
 
     # Our suggestion for a divergence free solution
-    #ux_mms = "(cos(pi*x[0]) + sin(pi*x[1])) * cos(t_e) + eps "
-    #uy_mms = "(-sin(pi*x[0])*x[1]*pi + sin(pi*x[0])) * cos(t_e) + eps "
+    #ux_mms = "(cos(x[0]) + sin(x[1])) * exp(t_e) + eps "
+    #uy_mms = "(sin(x[0])*x[1] + sin(x[0])) * exp(t_e) + eps "
+    #p_mms  = "exp(t_e) * cos(x[0]) * sin(x[1]) + eps"
 
-    wx_mms = "0" #ux_mms + " + cos(t_e) * sin(2*pi*x[0]) * sin(2*pi*x[1])"
-    wy_mms = "0" #uy_mms + " + cos(t_e) * sin(2*pi*x[0]) * sin(2*pi*x[1])"
-    p_mms  = "sin(t_e) * cos(pi*x[0]) * sin(pi*x[1]) + eps "
-
-    #TODO: Create a test to check if the velocity is divergence free
+    # Prescribed motion
+    wx_mms = "x[1]/pi" #x[0]" #ux_mms #+ " + cos(t_e) * sin(2*x[0]) * sin(2*x[1])"
+    wy_mms = "0" #uy_mms #+ " + cos(t_e) * sin(2*x[0]) * sin(2*x[1])"
 
     NS_parameters.update(dict(
         ux_mms = ux_mms,
@@ -72,13 +67,13 @@ def problem_parameters(NS_parameters, NS_expressions, commandline_kwargs, **NS_n
         ux_e = Expression(ux_mms, eps=eps, degree=v_degree, t_e=0),
         uy_e = Expression(uy_mms, eps=eps, degree=v_degree, t_e=0),
         p_e  = Expression(p_mms, eps=eps, degree=p_degree, t_e=0),
-        t_e  = Constant(0.0) )
+        t_e  = Constant(0.0))
 
 
 # Create a mesh here
 def mesh(N, **params):
     #m = UnitSquareMesh(N, N)
-    m = RectangleMesh(Point(-0.5, -0.5), Point(0.5, 0.5), N, N)
+    m = RectangleMesh(Point(0, 0), Point(np.pi, np.pi), N, N)
     return m
 
 
@@ -105,10 +100,23 @@ def body_force(V, Q, mesh, ux_mms, uy_mms, wx_mms, wy_mms, p_mms, nu, eps, t_e, 
     w_vec = as_vector([eval(wx_mms), eval(wy_mms)])
     p_    = eval(p_mms)
 
-    f     = ( diff(u_vec, t_e)
-            + dot(u_vec - w_vec, nabla_grad(u_vec))
-            + div(p_ * Identity(2))
-            - nu*div((grad(u_vec) + grad(u_vec).T)))
+    f = (diff(u_vec, t_e)
+         + dot(u_vec - w_vec, nabla_grad(u_vec))
+         + div(p_ * Identity(2))
+         - nu*div((grad(u_vec))))
+         #- nu*div((grad(u_vec) + grad(u_vec).T)))
+
+    # Check if div(u) = 0 holds
+    if abs(assemble(project(div(u_vec), V)*dx)) > 1e-16:
+    #if not np.sum(project(div(u_vec), V).vector().get_local() != 0) < 1:
+        raise ValueError("The suggested MMS solution is not divergence free. Please change" + \
+                         " the equations.")
+
+    #from IPython import embed; embed()
+    # Check if u = w holds on the boundary
+    if wx_mms != "0":
+        assert abs(assemble(project(eval(ux_mms) - eval(wx_mms), V)*ds)) < 5e-15
+        assert abs(assemble(project(eval(uy_mms) - eval(wy_mms), V)*ds)) < 5e-15
 
     return f
 
@@ -199,10 +207,16 @@ def pre_solve_hook(V, Q, mesh, newfolder, q_, t, velocity_degree, u_components, 
 
     mesh_sol.parameters.update(krylov_solvers)
     coordinates = mesh.coordinates()
-    dof_map = vertex_to_dof_map(V)
+
+    if velocity_degree == 2:
+        Vv = FunctionSpace(mesh, "CG", 1)
+        dof_map = vertex_to_dof_map(Vv)
+    else:
+        Vv = None
+        dof_map = vertex_to_dof_map(V)
 
     return dict(mesh_sol=mesh_sol, dof_map=dof_map,
-                wxmms=wxmms, wymms=wymms,
+                wxmms=wxmms, wymms=wymms, Vv=Vv,
                 wx_sol=wx_sol, wy_sol=wy_sol,
                 F_mesh=F_mesh, bc_mesh=bc_mesh, a_mesh=a_mesh, l_mesh=l_mesh,
                 A_mesh=A_mesh, L_mesh=L_mesh, coordinates=coordinates, viz_sol=viz_sol,
@@ -211,22 +225,27 @@ def pre_solve_hook(V, Q, mesh, newfolder, q_, t, velocity_degree, u_components, 
 
 
 def start_timestep_hook(t, dt, NS_expressions, **NS_namespace):
-    if 'IPCS' in NS_parameters['solver']:
-        NS_expressions["p_e"].t_e  = t - 0.5*dt
-    else:
-        NS_expressions["p_e"].t_e  = t
     NS_expressions["ux_e"].t_e = t
     NS_expressions["uy_e"].t_e = t
     NS_expressions["wx_e"].t_e = t
     NS_expressions["wy_e"].t_e = t
 
-    NS_expressions["t_e"].assign(t)
+    if 'IPCS' in NS_parameters['solver']:
+        NS_expressions["p_e"].t_e = t - 0.5*dt
+        NS_expressions["t_e"].assign(t-dt/2)
+    else:
+        NS_expressions["p_e"].t_e  = t
+        NS_expressions["t_e"].assign(t)
 
 
 def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, F_mesh,
-                             bc_mesh, NS_expressions, dof_map, V,
-                             a_mesh, l_mesh, A_mesh, L_mesh, mesh, coordinates,
+                             bc_mesh, NS_expressions, dof_map, V, Vv, A_cache,
+                             a_mesh, l_mesh, A_mesh, L_mesh, mesh, coordinates, t,
                              **NS_namespace):
+    P = VectorFunctionSpace(mesh, "CG", NS_namespace["velocity_degree"])
+    a = project(NS_namespace["wu_"] - NS_namespace["U_AB"], P)
+    print(np.abs(a.vector().get_local()).min())
+
     #for ui in u_components:
         # Update deformation
         #d_1[ui].vector().zero()
@@ -251,17 +270,24 @@ def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, 
     w_["u1"].vector().axpy(1, wy.vector())
 
     # Move mesh
-    coordinates[:, 0] += (wx.vector().get_local()*dt)[dof_map]
-    coordinates[:, 1] += (wy.vector().get_local()*dt)[dof_map]
+    if Vv is None:
+        coordinates[:, 0] += (wx.vector().get_local()*dt)[dof_map]
+        coordinates[:, 1] += (wy.vector().get_local()*dt)[dof_map]
+    else:
+        wx_tmp = interpolate(NS_expressions["wx_e"], Vv)
+        wy_tmp = interpolate(NS_expressions["wy_e"], Vv)
+        coordinates[:, 0] += (wx_tmp.vector().get_local()*dt)[dof_map]
+        coordinates[:, 1] += (wy_tmp.vector().get_local()*dt)[dof_map]
 
     # Do we need this line?
     mesh.bounding_box_tree().build(mesh)
+    A_cache.update_t(t)
 
 
 def temporal_hook(t, dt, q_, viz_sol, p_e, p_error, pmms, p_sol, ux_e, ux_error, tstep,
                   uxmms, ux_sol, wx_e, wxmms, wx_sol, uy_e, uy_error, uymms, uy_sol, wy_e,
                   wymms, wy_sol, V, Q, w_, **NS_namespace):
-    if tstep % 100 == 0:
+    if tstep % 1 == 0:
         p = interpolate(p_e, Q)
         p_sol.vector().zero()
         p_sol.vector().axpy(1, q_["p"].vector())
@@ -325,7 +351,10 @@ def theend_hook(V, Q, ux_e, uy_e, q_, T, dt, mesh, p_e, **NS_namespace):
     print("T      {0:.6e}".format(T))
     print("dt     {0:.6e}".format(dt))
     print("dx     {0:.6e}".format(mesh.hmin()))
-    print("L2 norm (ux-uxmms) {0:.6e}".format(errornorm(ux, q_["u0"], norm_type="l2",degree_rise=3)))
-    print("L2 norm (uy-uymms) {0:.6e}".format(errornorm(uy, q_["u1"], norm_type="l2",degree_rise=3)))
-    print("L2 norm (p-pmms)   {0:.6e}".format(errornorm(p, q_["p"], norm_type="l2", degree_rise=3)))
+    print("L2 norm (ux-uxmms) {0:.6e}".format(errornorm(ux, q_["u0"], norm_type="l2",
+                                                        degree_rise=5)))
+    print("L2 norm (uy-uymms) {0:.6e}".format(errornorm(uy, q_["u1"], norm_type="l2",
+                                                        degree_rise=5)))
+    print("L2 norm (p-pmms)   {0:.6e}".format(errornorm(p, q_["p"], norm_type="l2",
+                                                        degree_rise=5)))
     print(" ")

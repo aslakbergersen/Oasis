@@ -138,7 +138,7 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
 
 
 def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
-                              a_scalar, K, nu, nut_, u_components, LT, KT, #wx_,
+                              a_scalar, K, nu, nut_, u_components, LT, KT, wx_,
                               b_tmp, b0, x_1, x_2, u_ab, bcs, **NS_namespace):
     """Called on first inner iteration of velocity/pressure system.
 
@@ -152,7 +152,7 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
         u_ab[i].vector().zero()
         u_ab[i].vector().axpy(1.5, x_1[ui])
         u_ab[i].vector().axpy(-0.5, x_2[ui])
-        #u_ab[i].vector().axpy(-1, wx_[ui])
+        u_ab[i].vector().axpy(-1, wx_[ui])
 
     A = assemble(a_conv, tensor=A)
     A.axpy(-1.5, A, True)     # Negative convection on the rhs
@@ -219,7 +219,9 @@ def velocity_tentative_solve(ui, A, bcs, x_, x_2, u_sol, b, udiff,
     # x_2 only used on inner_iter 1, so use here as work vector
     x_2[ui].zero()
     x_2[ui].axpy(1., x_[ui])
-    t1 = Timer("Tentative Linear Algebra Solve")
+    t1 = Timer("Solve, tentative velocity")
+    #print(ui)
+    #from IPython import embed; embed()
     u_sol.solve(A, x_[ui], b[ui])
     t1.stop()
     udiff[0] += norm(x_2[ui] - x_[ui])
@@ -242,7 +244,7 @@ def pressure_solve(dp_, x_, Ap, b, p_sol, bcs, **NS_namespace):
     if hasattr(Ap, 'null_space'):
         p_sol.null_space.orthogonalize(b['p'])
 
-    t1 = Timer("Pressure Linear Algebra Solve")
+    t1 = Timer("Solve, pressure projection")
     p_sol.solve(Ap, x_['p'], b['p'])
     t1.stop()
     # LUSolver use normalize directly for normalization of pressure
@@ -256,7 +258,9 @@ def pressure_solve(dp_, x_, Ap, b, p_sol, bcs, **NS_namespace):
 def velocity_update(u_components, bcs, gradp, dp_, dt, x_, **NS_namespace):
     """Update the velocity after regular pressure velocity iterations."""
     for ui in u_components:
+        t1 = Timer("Solver, velocity update")
         gradp[ui](dp_)
+        t1.stop()
         x_[ui].axpy(-dt, gradp[ui].vector())
         [bc.apply(x_[ui]) for bc in bcs[ui]]
 
