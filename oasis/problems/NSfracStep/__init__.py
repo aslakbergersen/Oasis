@@ -3,7 +3,7 @@ __date__ = "2014-04-09"
 __copyright__ = "Copyright (C) 2014 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
-from problems import *
+from oasis.problems import *
 
 # Default parameters NSfracStep solver
 NS_parameters.update(
@@ -42,6 +42,11 @@ NS_parameters.update(
     Wale=dict(Cw=0.325),
     DynamicSmagorinsky=dict(Cs_comp_step=1),  # Time step interval for Cs to be recomputed
     KineticEnergySGS=dict(Ck=0.08, Ce=1.05),
+
+    # Back flow stabilization
+    back_flow_stabilization=False, # Turn on/off back flow stabilization
+    back_flow_facets=[],           # List or one int of facet value(s) to apply back flow stabilization
+    back_flow_beta=0.2,            # Standard value from Moghadam et al. Comput Mech (2011) 48:277–291
 
     # Parameter set when enabling test mode
     testing=False,
@@ -111,4 +116,5 @@ def temporal_hook(**NS_namespace):
 def update_prescribed_motion(**NS_namespace):
     """If the solver has moving boundaries the mesh has to be updated in this function.
     See problems/NSfracStep/flag.py for an example."""
+    update_prescribed_motion.Implemented = False
     return False

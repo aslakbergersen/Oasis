@@ -240,7 +240,7 @@ def start_timestep_hook(t, dt, NS_expressions, **NS_namespace):
 
 def update_prescribed_motion(t, dt, d_, d_1, w_, u_components, tstep, mesh_sol, F_mesh,
                              bc_mesh, NS_expressions, dof_map, V, Vv, A_cache,
-                             a_mesh, l_mesh, A_mesh, L_mesh, mesh, coordinates, t,
+                             a_mesh, l_mesh, A_mesh, L_mesh, mesh, coordinates,
                              **NS_namespace):
     P = VectorFunctionSpace(mesh, "CG", NS_namespace["velocity_degree"])
     a = project(NS_namespace["wu_"] - NS_namespace["U_AB"], P)

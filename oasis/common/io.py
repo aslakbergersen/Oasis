@@ -41,7 +41,6 @@ def create_initial_folders(folder, restart_folder, sys_comp, tstep,
     MPI.barrier(MPI.comm_world)
     if MPI.rank(MPI.comm_world) == 0:
         if not restart_folder:
-            #makedirs(path.join(newfolder, "Voluviz"))
             makedirs(path.join(newfolder, "Stats", "Points"))
             makedirs(path.join(newfolder, "Stats", "Probes"))
             makedirs(path.join(newfolder, "VTK"))

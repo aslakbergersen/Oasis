@@ -33,14 +33,14 @@ problems/NSfracStep/__init__.py for all possible parameters.
 """
 
 import importlib
-from common import *
+from oasis.common import *
 import time
 
 commandline_kwargs = parse_command_line()
 default_problem = 'DrivenCavity'
 problemname = commandline_kwargs.get('problem', default_problem)
 try:
-    problemmod = importlib.import_module('.'.join(('problems.NSfracStep', problemname)))
+    problemmod = importlib.import_module('.'.join(('oasis.problems.NSfracStep', problemname)))
 except ImportError:
     problemmod = importlib.import_module(problemname)
 except:
@@ -55,7 +55,7 @@ problem_parameters(**vars())
 vars().update(post_import_problem(**vars()))
 
 # Import chosen functionality from solvers
-solver = importlib.import_module('.'.join(('solvers.NSfracStep', solver)))
+solver = importlib.import_module('.'.join(('oasis.solvers.NSfracStep', solver)))
 vars().update({name:solver.__dict__[name] for name in solver.__all__})
 
 # Create lists of components solved for
@@ -134,7 +134,7 @@ bcs = create_bcs(**vars())
 
 # LES setup
 #exec("from oasis.solvers.NSfracStep.LES.{} import *".format(les_model))
-lesmodel = importlib.import_module('.'.join(('solvers.NSfracStep.LES', les_model)))
+lesmodel = importlib.import_module('.'.join(('oasis.solvers.NSfracStep.LES', les_model)))
 vars().update({name:lesmodel.__dict__[name] for name in lesmodel.__all__})
 vars().update(les_setup(**vars()))
 
@@ -175,10 +175,11 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
 
     move = update_prescribed_motion(**vars())
 
-    start_timestep_hook(**vars())
     if move:
         b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
+        A_cache.update_t(t)
 
+    start_timestep_hook(**vars())
     while udiff[0] > max_error and inner_iter < num_iter:
         inner_iter += 1
 

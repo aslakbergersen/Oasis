@@ -17,11 +17,43 @@ from ufl.tensors import ListTensor
 class Mat_cache_dict(dict):
     """Items in dictionary are matrices stored for efficient reuse."""
 
+    def __init__(self):
+        self.t = 0
+        self.forms = {}
+
+    def update_t(self, t):
+        if self.t < t:
+            self.t = t
+
+            # Only assmeble each form once, then apply BCs
+            for form in self.forms.keys():
+                assemble(form, tensor=self[(form, self.forms[form][0])])
+
+                # Copy over to other
+                for b in self.forms[form][1:]:
+                    self[(form, b)].empty()
+                    self[(form, b)].axpy(1, self[(form, self.forms[form][0])], True)
+
+            # Apply bcs
+            for form, bcs in self.keys():
+                for bc in bcs:
+                    bc.apply(self[(form, bcs)])
+
     def __missing__(self, key):
         form, bcs = key
-        A = assemble(form)
+        if (form, ()) in self.keys():
+            A = self[(form, ())].copy()
+        else:
+            A = assemble(form)
+
         for bc in bcs:
             bc.apply(A)
+
+        # Add to forms dictionary
+        if form in self.forms.keys():
+            self.forms[form].append(bcs)
+        else:
+            self.forms[form] = [bcs]
 
         self[key] = A
         return self[key]
@@ -163,8 +195,7 @@ class GradFunction(OasisFunction):
         self.i = i
         Source = p_.function_space()
         if not low_memory_version:
-            self.matvec = [
-                A_cache[(self.test * TrialFunction(Source).dx(i) * dx, ())], p_]
+            self.matvec = [A_cache[(self.test * TrialFunction(Source).dx(i) * dx, ())], p_]
 
         if solver_method.lower() == "gradient_matrix":
             from fenicstools import compiled_gradient_module
@@ -248,7 +279,7 @@ class DivFunction(OasisFunction):
         """
         Assemble right hand side (form*test*dx) in projection
         """
-        if not self.matvec[0] is None:
+        if self.matvec[0] is not None:
             self.rhs.zero()
             for mat, vec in self.matvec:
                 self.rhs.axpy(1.0, mat * vec.vector())

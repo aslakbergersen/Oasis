@@ -8,10 +8,9 @@ from ..NSfracStep import *
 from ..NSfracStep import __all__
 
 
-def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_,
-          scalar_components, V, Q, x_, p_, u_, A_cache,
-          velocity_update_solver, assemble_matrix, homogenize,
-          GradFunction, DivFunction, LESsource, **NS_namespace):
+def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_, scalar_components, V, Q, x_,
+          p_, u_, A_cache, mesh, velocity_update_solver, assemble_matrix, homogenize,
+          GradFunction, DivFunction, LESsource, back_flow_facets **NS_namespace):
     """Preassemble mass and diffusion matrices.
 
     Set up and prepare all equations to be solved. Called once, before
@@ -45,7 +44,6 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_,
              for i, ui in enumerate(u_components)}
 
     # Create dictionary to be returned into global NS namespace
-    d = dict(A=A, M=M, K=K, Ap=Ap, divu=divu, gradp=gradp)
 
     # Allocate coefficient matrix and work vectors for scalars. Matrix differs
     # from velocity in boundary conditions only
@@ -70,9 +68,21 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_,
     if bcs['p'] == []:
         attach_pressure_nullspace(Ap, x_, Q)
 
-    d.update(u_ab=u_ab, a_conv=a_conv, a_scalar=a_scalar, LT=LT, KT=KT)
+    # Add backflow stabilization
+    if back_flow_stabilization:
+        D = mesh.geometry().dim()
+        fd = MeshFunction("size_t", mesh, D - 1, mesh.domains())
+        ds_new = Measure("ds", domain=mesh, subdomain_data=fd)
+        n = FacetNormal(mesh) # FIXME: n is not updated for prescribed motion
+        if isinstance(back_flow_facets, int):
+            K2 = inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(back_flow_facets)
+        elif isinstance(back_flow_facets, list):
+            K2 = Constant(0)
+            for i in back_flow_facets:
+                K2 += inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(i)
 
-    return d
+    return dict(A=A, M=M, K=K, Ap=Ap, divu=divu, gradp=gradp, u_ab=u_ab, a_conv=a_conv,
+                a_scalar=a_scalar, LT=LT, KT=KT, K2=K2)
 
 
 def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
@@ -263,6 +273,7 @@ def velocity_update(u_components, bcs, gradp, dp_, dt, x_, **NS_namespace):
         t1.stop()
         x_[ui].axpy(-dt, gradp[ui].vector())
         [bc.apply(x_[ui]) for bc in bcs[ui]]
+
 
 def scalar_assemble(a_scalar, a_conv, Ta, dt, M, scalar_components, Schmidt_T, KT,
                     nu, nut_, Schmidt, b, K, x_1, b0, les_model, **NS_namespace):

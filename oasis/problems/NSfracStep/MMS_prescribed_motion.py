@@ -144,7 +144,7 @@ def pre_solve_hook(V, Q, mesh, newfolder, q_, t, velocity_degree, **NS_namespace
     viz_p = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "pressure.xdmf"))
     viz_w = XDMFFile(MPI.comm_world, path.join(newfolder, "VTK", "mesh_velocity.xdmf"))
 
-   for viz in [viz_d, viz_u, viz_p, viz_w]:
+    for viz in [viz_d, viz_u, viz_p, viz_w]:
         viz.parameters["rewrite_function_mesh"] = True
         viz.parameters["flush_output"] = True
 
