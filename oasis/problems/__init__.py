@@ -39,7 +39,7 @@ parameters["form_compiler"]["cpp_optimize_flags"] = "-O3"
 #parameters["form_compiler"].add("no_ferari", True)
 #set_log_active(False)
 #set_log_active(False)
-#set_log_level(False)
+#set_log_level(30)
 
 # Default parameters for all solvers
 NS_parameters = dict(

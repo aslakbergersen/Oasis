@@ -43,10 +43,13 @@ NS_parameters.update(
     DynamicSmagorinsky=dict(Cs_comp_step=1),  # Time step interval for Cs to be recomputed
     KineticEnergySGS=dict(Ck=0.08, Ce=1.05),
 
-    # Back flow stabilization
-    back_flow_stabilization=False, # Turn on/off back flow stabilization
-    back_flow_facets=[],           # List or one int of facet value(s) to apply back flow stabilization
-    back_flow_beta=0.2,            # Standard value from Moghadam et al. Comput Mech (2011) 48:277–291
+    # Neuman boundary condition on the outlets
+    neumann_facets=[],   # List of facets value(s) in mesh_function to apply boundary condition
+    mesh_function=None,              # Mesh function to mark boundary
+
+    # Back flow stabilization, turned on if back_flow_facets is != [] and mesh_function is not None
+    back_flow_facets=[],             # List of facet value(s) in mesh_function to apply back flow stabilization
+    back_flow_beta=0.2,              # Standard value from Moghadam et al. Comput Mech (2011) 48:277–291
 
     # Parameter set when enabling test mode
     testing=False,

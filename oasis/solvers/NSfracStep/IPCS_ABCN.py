@@ -95,25 +95,17 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         u_sol.parameters.update(krylov_solvers)
 
         ## pressure solver ##
-        #p_prec = PETScPreconditioner('hypre_amg')
-        #p_prec.parameters['report'] = True
-        #p_prec.parameters['hypre']['BoomerAMG']['agressive_coarsening_levels'] = 0
-        #p_prec.parameters['hypre']['BoomerAMG']['strong_threshold'] = 0.5
-        #PETScOptions.set('pc_hypre_boomeramg_truncfactor', 0)
-        #PETScOptions.set('pc_hypre_boomeramg_agg_num_paths', 1)
         p_sol = KrylovSolver(pressure_krylov_solver['solver_type'],
                              pressure_krylov_solver['preconditioner_type'])
-        #p_sol.parameters['preconditioner']['structure'] = 'same'
-        #p_sol.parameters['profile'] = True
         p_sol.parameters.update(krylov_solvers)
 
         sols = [u_sol, p_sol]
+
         ## scalar solver ##
         if len(scalar_components) > 0:
             c_prec = PETScPreconditioner(scalar_krylov_solver['preconditioner_type'])
             c_sol = PETScKrylovSolver(scalar_krylov_solver['solver_type'], c_prec)
             c_sol.parameters.update(krylov_solvers)
-            #c_sol.parameters['preconditioner']['structure'] = 'same_nonzero_pattern'
             sols.append(c_sol)
         else:
             sols.append(None)
@@ -121,12 +113,14 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         ## tentative velocity solver ##
         u_sol = LUSolver()
         u_sol.parameters['same_nonzero_pattern'] = True
+
         ## pressure solver ##
         p_sol = LUSolver()
         p_sol.parameters['reuse_factorization'] = True
         if bcs['p'] == []:
             p_sol.normalize = True
         sols = [u_sol, p_sol]
+
         ## scalar solver ##
         if len(scalar_components) > 0:
             c_sol = LUSolver()
@@ -167,6 +161,10 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
 
     # Add diffusion and compute rhs for all velocity components
     A.axpy(-0.5 * nu, K, True)
+    if back_flow_facets != []:
+        K_tmp = assemble(K2)
+        A.axpy(back_flow_beta, K_tmp, True)
+
     if les_model is not "NoModel":
         assemble(nut_ * KT[1] * dx, tensor=KT[0])
         A.axpy(-0.5, KT[0], True)

@@ -10,7 +10,8 @@ from ..NSfracStep import __all__
 
 def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_, scalar_components, V, Q, x_,
           p_, u_, A_cache, mesh, velocity_update_solver, assemble_matrix, homogenize,
-          GradFunction, DivFunction, LESsource, back_flow_facets **NS_namespace):
+          GradFunction, DivFunction, LESsource, back_flow_facets, mesh_function,
+          neumann_facets, **NS_namespace):
     """Preassemble mass and diffusion matrices.
 
     Set up and prepare all equations to be solved. Called once, before
@@ -34,8 +35,7 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_, scalar_components,
     A = Matrix(M)
 
     # Allocate Function for holding and computing the velocity divergence on Q
-    divu = DivFunction(u_, Q, name='divu',
-                       method=velocity_update_solver)
+    divu = DivFunction(u_, Q, name='divu', method=velocity_update_solver)
 
     # Allocate a dictionary of Functions for holding and computing pressure gradients
     gradp = {ui: GradFunction(p_, V, i=i, name='dpd' + ('x', 'y', 'z')[i],
@@ -44,6 +44,7 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_, scalar_components,
              for i, ui in enumerate(u_components)}
 
     # Create dictionary to be returned into global NS namespace
+    d = dict(A=A, M=M, K=K, Ap=Ap, divu=divu, gradp=gradp)
 
     # Allocate coefficient matrix and work vectors for scalars. Matrix differs
     # from velocity in boundary conditions only
@@ -69,20 +70,31 @@ def setup(u_components, u, v, p, q, bcs, les_model, nu, nut_, scalar_components,
         attach_pressure_nullspace(Ap, x_, Q)
 
     # Add backflow stabilization
-    if back_flow_stabilization:
-        D = mesh.geometry().dim()
-        fd = MeshFunction("size_t", mesh, D - 1, mesh.domains())
-        ds_new = Measure("ds", domain=mesh, subdomain_data=fd)
-        n = FacetNormal(mesh) # FIXME: n is not updated for prescribed motion
-        if isinstance(back_flow_facets, int):
-            K2 = inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(back_flow_facets)
-        elif isinstance(back_flow_facets, list):
-            K2 = Constant(0)
-            for i in back_flow_facets:
-                K2 += inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(i)
+    K2 = None
+    if neumann_facets != [] and mesh_function is not None:
+        if MPI.rank(MPI.comm_world) == 0:
+            print("Adding naumann outflow for", back_flow_facets)
+        ds_new = Measure("ds", domain=mesh, subdomain_data=mesh_function)
+        n = FacetNormal(mesh)
+        K2 = inner(v, (dot(grad(u), n))) * ds(neumann_facets[0])
+        for i in back_flow_facets[:1]:
+            K2 += inner(v, (dot(grad(u), n))) * ds(i)
 
-    return dict(A=A, M=M, K=K, Ap=Ap, divu=divu, gradp=gradp, u_ab=u_ab, a_conv=a_conv,
-                a_scalar=a_scalar, LT=LT, KT=KT, K2=K2)
+    # Add backflow stabilization
+    if back_flow_facets != [] and mesh_function is not None:
+        if MPI.rank(MPI.comm_world) == 0:
+            print("Adding backflow stabilization for", back_flow_facets)
+        ds_new = Measure("ds", domain=mesh, subdomain_data=mesh_function)
+        n = FacetNormal(mesh)
+        if K2 is None:
+            K2 = inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(back_flow_facets[0])
+        else:
+            K2 += inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(back_flow_facets[0])
+        for i in back_flow_facets[:1]:
+            K2 += inner(v, (dot(u_, n) - abs(dot(u_, n)))/2.0 * u) * ds(i)
+
+    d.update(dict(u_ab=u_ab, a_conv=a_conv, a_scalar=a_scalar, LT=LT, KT=KT, K2=K2))
+    return d
 
 
 def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
@@ -105,25 +117,16 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         u_sol.parameters.update(krylov_solvers)
 
         ## pressure solver ##
-        #p_prec = PETScPreconditioner('hypre_amg')
-        #p_prec.parameters['report'] = True
-        #p_prec.parameters['hypre']['BoomerAMG']['agressive_coarsening_levels'] = 0
-        #p_prec.parameters['hypre']['BoomerAMG']['strong_threshold'] = 0.5
-        #PETScOptions.set('pc_hypre_boomeramg_truncfactor', 0)
-        #PETScOptions.set('pc_hypre_boomeramg_agg_num_paths', 1)
         p_sol = KrylovSolver(pressure_krylov_solver['solver_type'],
                              pressure_krylov_solver['preconditioner_type'])
-        #p_sol.parameters['preconditioner']['structure'] = 'same'
-        #p_sol.parameters['profile'] = True
         p_sol.parameters.update(krylov_solvers)
-
         sols = [u_sol, p_sol]
+
         ## scalar solver ##
         if len(scalar_components) > 0:
             c_prec = PETScPreconditioner(scalar_krylov_solver['preconditioner_type'])
             c_sol = PETScKrylovSolver(scalar_krylov_solver['solver_type'], c_prec)
             c_sol.parameters.update(krylov_solvers)
-            #c_sol.parameters['preconditioner']['structure'] = 'same_nonzero_pattern'
             sols.append(c_sol)
         else:
             sols.append(None)
@@ -131,12 +134,14 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
         ## tentative velocity solver ##
         u_sol = LUSolver()
         u_sol.parameters['same_nonzero_pattern'] = True
+
         ## pressure solver ##
         p_sol = LUSolver()
         p_sol.parameters['reuse_factorization'] = True
         if bcs['p'] == []:
             p_sol.normalize = True
         sols = [u_sol, p_sol]
+
         ## scalar solver ##
         if len(scalar_components) > 0:
             c_sol = LUSolver()
@@ -147,9 +152,10 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
     return sols
 
 
-def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
+def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model, K2,
                               a_scalar, K, nu, nut_, u_components, LT, KT, wx_,
-                              b_tmp, b0, x_1, x_2, u_ab, bcs, **NS_namespace):
+                              back_flow_beta, b_tmp, b0, x_1, x_2, u_ab, bcs,
+                              back_flow_facets,**NS_namespace):
     """Called on first inner iteration of velocity/pressure system.
 
     Assemble convection matrix, compute rhs of tentative velocity and
@@ -157,6 +163,7 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
 
     """
     t0 = Timer("Assemble first inner iter")
+
     # Update u_ab used as convecting velocity
     for i, ui in enumerate(u_components):
         u_ab[i].vector().zero()
@@ -165,7 +172,7 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
         u_ab[i].vector().axpy(-1, wx_[ui])
 
     A = assemble(a_conv, tensor=A)
-    A.axpy(-1.5, A, True)     # Negative convection on the rhs
+    A *= -0.5                 # Negative convection on the rhs
     A.axpy(1. / dt, M, True)  # Add mass
 
     # Set up scalar matrix for rhs using the same convection as velocity
@@ -177,6 +184,10 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
 
     # Add diffusion and compute rhs for all velocity components
     A.axpy(-0.5 * nu, K, True)
+    if back_flow_facets != []:
+        K_tmp = assemble(K2)
+        A.axpy(0.5 * back_flow_beta, K_tmp, True)
+
     if les_model is not "NoModel":
         assemble(nut_ * KT[1] * dx, tensor=KT[0])
         A.axpy(-0.5, KT[0], True)
@@ -185,6 +196,7 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
         # Start with body force
         b_tmp[ui].zero()
         b_tmp[ui].axpy(1., b0[ui])
+
         # Add transient, convection and diffusion
         b_tmp[ui].axpy(1., A * x_1[ui])
         if not les_model is "NoModel":
@@ -192,7 +204,7 @@ def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
             b_tmp[ui].axpy(1., LT.vector())
 
     # Reset matrix for lhs
-    A.axpy(-2., A, True)
+    A *= -1
     A.axpy(2. / dt, M, True)
     [bc.apply(A) for bc in bcs['u0']]
 
@@ -219,19 +231,12 @@ def velocity_tentative_assemble(ui, b, b_tmp, p_, gradp, **NS_namespace):
 def velocity_tentative_solve(ui, A, bcs, x_, x_2, u_sol, b, udiff,
                              use_krylov_solvers, **NS_namespace):
     """Linear algebra solve of tentative velocity component."""
-    #if use_krylov_solvers:
-        #if ui == 'u0':
-            #u_sol.parameters['preconditioner']['structure'] = 'same_nonzero_pattern'
-        #else:
-            #u_sol.parameters['preconditioner']['structure'] = 'same'
     [bc.apply(b[ui]) for bc in bcs[ui]]
 
     # x_2 only used on inner_iter 1, so use here as work vector
     x_2[ui].zero()
     x_2[ui].axpy(1., x_[ui])
     t1 = Timer("Solve, tentative velocity")
-    #print(ui)
-    #from IPython import embed; embed()
     u_sol.solve(A, x_[ui], b[ui])
     t1.stop()
     udiff[0] += norm(x_2[ui] - x_[ui])
@@ -272,7 +277,9 @@ def velocity_update(u_components, bcs, gradp, dp_, dt, x_, **NS_namespace):
         gradp[ui](dp_)
         t1.stop()
         x_[ui].axpy(-dt, gradp[ui].vector())
+        t1 = Timer("Boundary condition, mesh displacement")
         [bc.apply(x_[ui]) for bc in bcs[ui]]
+        t1.stop()
 
 
 def scalar_assemble(a_scalar, a_conv, Ta, dt, M, scalar_components, Schmidt_T, KT,
@@ -302,7 +309,7 @@ def scalar_assemble(a_scalar, a_conv, Ta, dt, M, scalar_components, Schmidt_T, K
             Ta.axpy(0.5 / Schmidt_T[ci], KT[0], True)
 
     # Reset matrix for lhs - Note scalar matrix does not contain diffusion
-    Ta.axpy(-2., Ta, True)
+    Ta *= -1
     Ta.axpy(2. / dt, M, True)
 
 
