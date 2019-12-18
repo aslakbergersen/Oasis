@@ -4,7 +4,7 @@ __copyright__ = "Copyright (C) 2013 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
 from dolfin import *
-from oasis.solvers import *
+from .. import *
 
 """Define all functions required by fractional step solver."""
 __all__ = ["assemble_first_inner_iter", "velocity_tentative_assemble",

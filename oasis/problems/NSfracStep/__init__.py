@@ -3,7 +3,7 @@ __date__ = "2014-04-09"
 __copyright__ = "Copyright (C) 2014 " + __author__
 __license__ = "GNU Lesser GPL version 3 or any later version"
 
-from oasis.problems import *
+from .. import *
 
 # Default parameters NSfracStep solver
 NS_parameters.update(
@@ -45,11 +45,11 @@ NS_parameters.update(
 
     # Neuman boundary condition on the outlets
     neumann_facets=[],   # List of facets value(s) in mesh_function to apply boundary condition
-    mesh_function=None,              # Mesh function to mark boundary
+    mesh_function=None,  # Mesh function to mark boundary
 
     # Back flow stabilization, turned on if back_flow_facets is != [] and mesh_function is not None
-    back_flow_facets=[],             # List of facet value(s) in mesh_function to apply back flow stabilization
-    back_flow_beta=0.2,              # Standard value from Moghadam et al. Comput Mech (2011) 48:277–291
+    back_flow_facets=[], # List of facet value(s) in mesh_function to apply back flow stabilization
+    back_flow_beta=0.2,  # Standard value from Moghadam et al. Comput Mech (2011) 48:277–291
 
     # Parameter set when enabling test mode
     testing=False,

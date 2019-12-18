@@ -112,11 +112,11 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
     else:
         ## tentative velocity solver ##
         u_sol = LUSolver()
-        u_sol.parameters['same_nonzero_pattern'] = True
+        #u_sol.parameters['same_nonzero_pattern'] = True
 
         ## pressure solver ##
         p_sol = LUSolver()
-        p_sol.parameters['reuse_factorization'] = True
+        #p_sol.parameters['reuse_factorization'] = True
         if bcs['p'] == []:
             p_sol.normalize = True
         sols = [u_sol, p_sol]
@@ -133,7 +133,8 @@ def get_solvers(use_krylov_solvers, krylov_solvers, bcs,
 
 def assemble_first_inner_iter(A, a_conv, dt, M, scalar_components, les_model,
                               a_scalar, K, nu, nut_, u_components, LT, KT, #wx_,
-                              b_tmp, b0, x_1, x_2, u_ab, bcs, **NS_namespace):
+                              b_tmp, b0, x_1, x_2, u_ab, bcs, back_flow_facets,
+                              **NS_namespace):
     """Called on first inner iteration of velocity/pressure system.
 
     Assemble convection matrix, compute rhs of tentative velocity and

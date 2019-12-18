@@ -47,6 +47,8 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
             dt = dt,
             velocity_degree = 1,
             pressure_degree = 1,
+            max_iter = 20,
+            max_error = 1e-8,
             folder = "flag_results",
             lc = 0.1,
             mesh_path = "/Users/Aslak/Dropbox/Work/FEniCS/prescribed/Oasis/oasis/mesh/flag_{:0.2f}.xdmf",
@@ -103,12 +105,13 @@ def mesh(mesh_path, lc, H, L, b_dist, b_h, b_l, f_l, f_h, **NS_namespace):
         ps = geom.add_plane_surface(ll_outer, [ll_inner])
 
         # Mesh surface
-        points, cells, point_data, cell_data, field_data = pygmsh.generate_mesh(geom)
+        data = pygmsh.generate_mesh(geom)
+        #points, cells, point_data, cell_data, field_data = pygmsh.generate_mesh(geom)
 
         # Write mesh
         meshio.write(mesh_path, meshio.Mesh(
-                     points=points,
-                     cells={"triangle": cells["triangle"]}))
+                     points=data.points,
+                     cells={"triangle": data.cells["triangle"]}))
 
     mesh = Mesh()
     with XDMFFile(MPI.comm_world, mesh_path) as infile:
@@ -365,8 +368,7 @@ def update_prescribed_motion(t, dt, wx_, w_, u_components, tstep, mesh_sol,
 
     if move:
         mesh.bounding_box_tree().build(mesh)
-        t0 = time.time()
-        A_cache.update_t(t)
+        #A_cache.update_t(t)
 
     return move
 

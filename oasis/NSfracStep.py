@@ -182,6 +182,7 @@ while t < (T - tstep * DOLFIN_EPS) and not stop:
     #b0 = dict((ui, assemble(v*f[i]*dx)) for i, ui in enumerate(u_components))
 
     while udiff[0] > max_error and inner_iter < num_iter:
+        print(udiff[0])
         inner_iter += 1
 
         #t0 = OasisTimer("Tentative velocity")
