@@ -1,16 +1,13 @@
-from ..NSfracStep import *
-import sys
 import pickle
-from os import makedirs
-import random
-import time
 import numpy as np
 import meshio
 import pygmsh
+from pathlib import Path
+
+from oasis.common.utilities import AssignedVectorFunction
+from oasis.problems.NSfracStep import *
 
 set_log_level(99)
-#set_log_level(30)
-#parameters["allow_extrapolation"] = True
 
 
 def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_namespace):
@@ -31,7 +28,7 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
         nu = 0.01
         NS_parameters.update(
             checkpoint = 1000,
-            save_step = 10e10,
+            save_step = 10,
             print_intermediate_info = 100,
 
             # Geometrical parameters
@@ -51,18 +48,16 @@ def problem_parameters(commandline_kwargs, NS_parameters, NS_expressions, **NS_n
             max_error = 1e-8,
             folder = "flag_results",
             lc = 0.1,
-            mesh_path = "/Users/Aslak/Dropbox/Work/FEniCS/prescribed/Oasis/oasis/mesh/flag_{:0.2f}.xdmf",
-            use_krylov_solvers = True,
-            )
-
-        #NS_parameters["velocity_update_solver"]["low_memory_version"] = True
+            mesh_path = "./mesh/flag_{:0.2f}.xdmf",
+            use_krylov_solvers = True)
 
 
 def mesh(mesh_path, lc, H, L, b_dist, b_h, b_l, f_l, f_h, **NS_namespace):
     # Name mesh after local cell length
-    mesh_path = mesh_path.format(lc)
+    mesh_path = Path(mesh_path.format(lc))
+    mesh_path.parent.mkdir(exist_ok=True, parents=True)
 
-    if not path.exists(mesh_path):
+    if not mesh_path.exists():
         # Initialize geometry
         geom = pygmsh.built_in.geometry.Geometry()
 
@@ -106,14 +101,13 @@ def mesh(mesh_path, lc, H, L, b_dist, b_h, b_l, f_l, f_h, **NS_namespace):
 
         # Mesh surface
         data = pygmsh.generate_mesh(geom)
-        #points, cells, point_data, cell_data, field_data = pygmsh.generate_mesh(geom)
 
         # Write mesh
-        meshio.write(mesh_path, meshio.Mesh(
-                     points=data.points,
-                     cells={"triangle": data.cells["triangle"]}))
+        meshio.write(mesh_path.__str__(), meshio.Mesh(points=data.points,
+                                            cells={"triangle": data.cells["triangle"]}))
 
     mesh = Mesh()
+    mesh_path = mesh_path.__str__()
     with XDMFFile(MPI.comm_world, mesh_path) as infile:
         infile.read(mesh)
 
@@ -261,14 +255,14 @@ def create_bcs(V, Q, w_, sys_comp, u_components, mesh, newfolder, f_h,
     bcp_out = DirichletBC(Q, Constant(0), boundary, 5)
 
     bcs = dict((ui, []) for ui in sys_comp)
-    bcs['u0'] = [bcu_flag_x, bcu_in_x, bcu_wall, bcu_box]
-    bcs['u1'] = [bcu_flag_y, bcu_in_y, bcu_wall, bcu_box] # bcu_out_y
+    bcs['u0'] = [bcu_in_x, bcu_wall, bcu_box, bcu_flag_x]
+    bcs['u1'] = [bcu_in_y, bcu_wall, bcu_box, bcu_flag_y]
     bcs["p"] = [bcp_out]
 
     return bcs
 
 
-def pre_solve_hook(V, u_, mesh, newfolder, T, velocity_degree, tstep, dt, L,
+def pre_solve_hook(V, u_, mesh, newfolder, T, velocity_degree, tstep, dt, L, wu_,
                    assemble_matrix, b_dist, b_l, H, f_h, x_, u_components, boundary,
                    **NS_namespace):
     """Called prior to time loop"""
@@ -314,6 +308,9 @@ def pre_solve_hook(V, u_, mesh, newfolder, T, velocity_degree, tstep, dt, L,
     # Outlet
     rigid_bc_box = DirichletBC(V, Constant(0), boundary, 7)
 
+    # For moving the mesh
+    position = AssignedVectorFunction(wu_)
+
     bc_mesh = dict((ui, []) for ui in u_components)
     rigid_bc = [rigid_bc_in, rigid_bc_walls, rigid_bc_out, rigid_bc_box]
     bc_mesh["u0"] = [flag_bc_x] + rigid_bc
@@ -337,11 +334,11 @@ def pre_solve_hook(V, u_, mesh, newfolder, T, velocity_degree, tstep, dt, L,
     return dict(viz_p=viz_p, viz_u=viz_u, viz_d=viz_d, viz_w=viz_w,
                 u_vec=u_vec, mesh_sol=mesh_sol, bc_mesh=bc_mesh,
                 dof_map=dof_map, a_mesh=a_mesh, A_mesh=A_mesh, L_mesh=L_mesh,
-                coordinates=coordinates)
+                coordinates=coordinates, position=position)
 
 
 def update_prescribed_motion(t, dt, wx_, w_, u_components, tstep, mesh_sol,
-                             bc_mesh, NS_expressions, dof_map, A_cache,
+                             bc_mesh, NS_expressions, dof_map, A_cache, position,
                              a_mesh, A_mesh, L_mesh, mesh, coordinates, **NS_namespace):
     # Update time
     for key, value in NS_expressions.items():
@@ -356,19 +353,22 @@ def update_prescribed_motion(t, dt, wx_, w_, u_components, tstep, mesh_sol,
 
         [bc.apply(L_mesh[ui]) for bc in bc_mesh[ui]]
 
-        t1 = OasisTimer("Mesh solver") #time.time()
+        t1 = OasisTimer("Mesh solver")
         mesh_sol.solve(A_mesh, wx_[ui], L_mesh[ui])
         t1.stop()
 
-        # Move mesh
-        arr = w_[ui].vector().get_local()
-        if 1e-15 < abs(arr.min()) + abs(arr.max()):
-            coordinates[:, int(ui[-1])] += (arr*dt)[dof_map]
-            move = True
+    position()
+    position.vector()[:] *= dt
 
-    if move:
+    # Move mesh
+    arr = position.vector().get_local()
+    if 1e-15 < abs(arr.min()) + abs(arr.max()):
+        log_level = get_log_level()
+        set_log_level(99)
+        ALE.move(mesh, position)
         mesh.bounding_box_tree().build(mesh)
-        #A_cache.update_t(t)
+        set_log_level(log_level)
+        move = True
 
     return move
 
@@ -381,4 +381,7 @@ def temporal_hook(t, w_, q_, f, tstep, viz_u, viz_d, viz_p, u_components,
     viz_w.write(w_["u0"], t)
     viz_w.write(w_["u1"], t)
 
-    print("Time:", round(t, 4), "u:", q_["u0"](12, 6), q_["u1"](12,6)) # #, file="output_flag.txt")
+    try:
+        print("Time:", round(t, 4), "u:", q_["u0"](12, 6), q_["u1"](12,6)) # #, file="output_flag.txt")
+    except:
+        pass
